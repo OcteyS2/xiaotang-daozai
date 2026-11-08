@@ -52,7 +52,7 @@ pub(crate) fn atomic_write(path:&Path,body:&[u8])->std::io::Result<()> {
     use std::sync::atomic::{AtomicU64,Ordering};
     static SERIAL:AtomicU64=AtomicU64::new(0);
     let (tmp,mut file)=loop {
-        let mut name=path.file_name().ok_or_else(||std::io::Error::other("缺少文件名"))?.to_os_string();
+        let mut name=path.file_name().ok_or_else(||std::io::Error::other("Missing file name"))?.to_os_string();
         name.push(format!(".{}-{}.tmp",std::process::id(),SERIAL.fetch_add(1,Ordering::Relaxed)));
         let tmp=path.with_file_name(name);
         match fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
@@ -105,15 +105,15 @@ impl Skin {
         match value { "fluid" => Self::Fluid, "cream" => Self::Cream, "glass_light" => Self::GlassLight, "glass" | "glass_dark" => Self::GlassDark, _ => Self::Classic }
     }
     pub fn label(self) -> &'static str {
-        match self { Self::Classic => "经典", Self::Fluid => "悬浮云", Self::Cream => "奶油", Self::GlassLight => "毛玻璃·浅", Self::GlassDark => "毛玻璃·深" }
+        match self { Self::Classic => "Classic", Self::Fluid => "Floating Cloud", Self::Cream => "Cream", Self::GlassLight => "Frosted·Light", Self::GlassDark => "Frosted·Dark" }
     }
     pub fn description(self) -> &'static str {
         match self {
-            Self::Classic => "纯黑岛体，与屏幕刘海融为一体，资源占用最低。",
-            Self::Fluid => "半透明灰底随音乐封面换色，光晕跟随鼠标，播放进度带有渐隐光尾。皮肤作者：啵（@hanhb123）。",
-            Self::Cream => "暖白底色配深棕文字和橙色强调，柔和明亮。",
-            Self::GlassLight => "浅色磨砂玻璃，透出身后桌面的颜色，文字为深色；按背景明暗自动调整，保证清晰。",
-            Self::GlassDark => "深色磨砂玻璃，透出身后桌面的颜色，文字为白色；按背景明暗自动调整，保证清晰。",
+            Self::Classic => "Pure black island that blends with the screen notch; lowest resource use.",
+            Self::Fluid => "Translucent gray that tints with the album cover, a glow that follows the mouse, and a fading light trail on the progress bar. Skin by 啵 (@hanhb123).",
+            Self::Cream => "Warm white with dark brown text and orange accents; soft and bright.",
+            Self::GlassLight => "Light frosted glass showing the desktop behind it, with dark text; auto-adjusts to background brightness for clarity.",
+            Self::GlassDark => "Dark frosted glass showing the desktop behind it, with white text; auto-adjusts to background brightness for clarity.",
         }
     }
     pub fn is_glass(self) -> bool { matches!(self, Self::GlassLight | Self::GlassDark) }
@@ -136,12 +136,12 @@ impl IslandShape {
         match value { "pill" => Self::Pill, _ => Self::Notch }
     }
     pub fn label(self) -> &'static str {
-        match self { Self::Notch => "刘海", Self::Pill => "胶囊" }
+        match self { Self::Notch => "Notch", Self::Pill => "Capsule" }
     }
     pub fn description(self) -> &'static str {
         match self {
-            Self::Notch => "贴着屏幕顶边，顶部两侧向外柔和过渡，像屏幕刘海。",
-            Self::Pill => "悬浮在屏幕顶边下方，四角圆润，收起时是完整的胶囊。",
+            Self::Notch => "Hugs the top edge of the screen, flaring softly outward at the top corners, like a screen notch.",
+            Self::Pill => "Floats just below the top edge with rounded corners; a complete capsule when collapsed.",
         }
     }
 }
@@ -164,7 +164,7 @@ impl Dock {
         match value { "left" => Self::Left, "right" => Self::Right, _ => Self::Top }
     }
     pub fn label(self) -> &'static str {
-        match self { Self::Top => "顶部", Self::Left => "左侧", Self::Right => "右侧" }
+        match self { Self::Top => "Top", Self::Left => "Left", Self::Right => "Right" }
     }
     pub fn is_side(self) -> bool { self != Self::Top }
 }
@@ -263,8 +263,8 @@ impl Settings {
         let (pm, hour) = time.hour12();
         let digits=if self.clock_12h {format!("{}:{:02}",hour,time.minute())}else{time.format("%H:%M").to_string()};
         let period=match self.clock_period {
-            1=>if pm {"下午"}else{"上午"},
-            2=>match time.hour() {0..=5=>"凌晨",6..=10=>"上午",11..=12=>"中午",13..=16=>"下午",17..=18=>"傍晚",_=>"晚上"},
+            1=>if pm {"PM"}else{"AM"},
+            2=>match time.hour() {0..=5=>"Late Night",6..=10=>"AM",11..=12=>"Noon",13..=16=>"PM",17..=18=>"Evening",_=>"Night"},
             _=>return digits,
         };
         format!("{period} {digits}")
@@ -416,7 +416,7 @@ pub struct TodoItem {
     pub reminded_on: Option<String>,
 }
 
-pub const WEEKDAY_NAMES: [&str; 7] = ["一", "二", "三", "四", "五", "六", "日"];
+pub const WEEKDAY_NAMES: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 pub const REPEAT_ALL: u8 = 0b111_1111;
 pub const REPEAT_WORKDAYS: u8 = 0b001_1111;
 pub const REPEAT_WEEKEND: u8 = 0b110_0000;
@@ -430,13 +430,13 @@ fn weekday_bit(date: &str) -> Option<u8> {
 /// 「每天」「工作日」「周末」「每周一、三、五」。
 pub fn repeat_label(mask: u8) -> String {
     match mask & REPEAT_ALL {
-        0 => "不重复".into(),
-        REPEAT_ALL => "每天".into(),
-        REPEAT_WORKDAYS => "工作日".into(),
-        REPEAT_WEEKEND => "周末".into(),
+        0 => "No repeat".into(),
+        REPEAT_ALL => "Every day".into(),
+        REPEAT_WORKDAYS => "Weekdays".into(),
+        REPEAT_WEEKEND => "Weekends".into(),
         mask => {
             let days: Vec<&str> = (0..7).filter(|i| mask & (1 << i) != 0).map(|i| WEEKDAY_NAMES[i]).collect();
-            format!("每周{}", days.join("、"))
+            format!("Every {}", days.join(", "))
         }
     }
 }
@@ -445,10 +445,10 @@ pub fn repeat_label(mask: u8) -> String {
 pub fn repeat_tag(mask: u8) -> String {
     match mask & REPEAT_ALL {
         0 => String::new(),
-        REPEAT_ALL => "每天".into(),
-        REPEAT_WORKDAYS => "工作日".into(),
-        REPEAT_WEEKEND => "周末".into(),
-        mask => format!("周{}", (0..7).filter(|i| mask & (1 << i) != 0).map(|i| WEEKDAY_NAMES[i]).collect::<String>()),
+        REPEAT_ALL => "Every day".into(),
+        REPEAT_WORKDAYS => "Weekdays".into(),
+        REPEAT_WEEKEND => "Weekends".into(),
+        mask => format!("{}", (0..7).filter(|i| mask & (1 << i) != 0).map(|i| WEEKDAY_NAMES[i]).collect::<String>()),
     }
 }
 
@@ -731,7 +731,7 @@ impl Shelf {
     /// 原工具的做法：记录文件所在位置，不复制文件本体（官网说明
     /// "the shelf remembers where your files live"）。
     pub fn add(&mut self, src: &Path) -> std::io::Result<()> {
-        if !src.exists() { return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "文件不存在")); }
+        if !src.exists() { return Err(std::io::Error::new(std::io::ErrorKind::NotFound, "File not found")); }
         if !self.items.iter().any(|p| p == src) {
             self.items.push(src.to_path_buf());
             self.save();

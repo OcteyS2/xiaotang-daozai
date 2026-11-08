@@ -17,9 +17,9 @@ fn trace(step:impl FnOnce()->String){
 fn take_trace()->Vec<String>{TRACE.with(|trace|std::mem::take(&mut *trace.borrow_mut()))}
 fn outcome(result:&Result<Lyrics,FetchError>)->String{
     match result {
-        Ok(lyrics) if lyrics.synced=>format!("同步{}行",lyrics.lines.len()),
-        Ok(lyrics)=>format!("文本{}行",lyrics.lines.len()),
-        Err(error)=>match error {FetchError::NotFound=>"未找到".into(),FetchError::IncompleteMetadata=>"信息不完整".into(),FetchError::Unavailable(_)=>"网络失败".into(),FetchError::InvalidResponse(_)=>"响应异常".into()},
+        Ok(lyrics) if lyrics.synced=>format!("synced {} lines",lyrics.lines.len()),
+        Ok(lyrics)=>format!("plain {} lines",lyrics.lines.len()),
+        Err(error)=>match error {FetchError::NotFound=>"not found".into(),FetchError::IncompleteMetadata=>"incomplete info".into(),FetchError::Unavailable(_)=>"network failed".into(),FetchError::InvalidResponse(_)=>"bad response".into()},
     }
 }
 
@@ -80,10 +80,10 @@ pub enum FetchError {
 impl FetchError {
     pub fn label(&self)->&'static str {
         match self {
-            Self::Unavailable(_)=>"暂未获取歌词，请重试",
-            Self::NotFound=>"未找到匹配歌词",
-            Self::InvalidResponse(_)=>"歌词响应异常",
-            Self::IncompleteMetadata=>"播放器未提供完整歌曲信息",
+            Self::Unavailable(_)=>"Couldn’t get lyrics yet, please retry",
+            Self::NotFound=>"No matching lyrics found",
+            Self::InvalidResponse(_)=>"Lyrics response error",
+            Self::IncompleteMetadata=>"Player didn’t provide full song info",
         }
     }
 }
@@ -185,15 +185,15 @@ pub fn fetch_for_display(source:&str,track:&str,artist:&str,duration:f64,song_id
     let started=std::time::Instant::now();
     let result=(||{
         if source.to_ascii_lowercase().contains("kugou"){
-            if let Some(lyrics)=kugou_cache::read(track,artist,duration){trace(||"酷狗本地:命中".into());return Ok((lyrics,false));}
-            trace(||"酷狗本地:无".into());
+            if let Some(lyrics)=kugou_cache::read(track,artist,duration){trace(||"Kugou local:hit".into());return Ok((lyrics,false));}
+            trace(||"Kugou local:none".into());
             return cached.map(Ok).unwrap_or_else(||fetch(track,artist,duration)).map(|lyrics|(lyrics,true));
         }
         fetch_for_source(source,track,artist,duration,song_id).map(|lyrics|(lyrics,false))
     })();
     let summary=outcome(&result.as_ref().map(|(lyrics,_)|lyrics.clone()).map_err(Clone::clone));
     let id=song_id.map(|id|format!(" ID={id}")).unwrap_or_default();
-    let line=format!("{} {source} · {track} - {artist}{id} → {} → 结果:{summary} 用时{}ms\n",
+    let line=format!("{} {source} · {track} - {artist}{id} → {} → result:{summary} took {}ms\n",
         std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
         take_trace().join(" → "),started.elapsed().as_millis());
     // 测试时不写，免得把模拟数据混进用户的真实诊断日志。
@@ -206,10 +206,10 @@ pub fn fetch_for_source(source:&str,track:&str,artist:&str,duration:f64,song_id:
     if source.to_ascii_lowercase().contains("qqmusic") {
         let common=cache_path(track,artist,duration);
         let path=common.parent().unwrap().join("qqmusic").join(common.file_name().unwrap());
-        if let Some(lyrics)=read_cache(&path).filter(|lyrics|!romanized(track,lyrics)){trace(||"本地缓存:命中".into());return Ok(lyrics);}
-        if let Some(remembered)=read_negative(&path){trace(||"近期已确认无同步歌词".into());return remembered;}
+        if let Some(lyrics)=read_cache(&path).filter(|lyrics|!romanized(track,lyrics)){trace(||"Local cache:hit".into());return Ok(lyrics);}
+        if let Some(remembered)=read_negative(&path){trace(||"Recently confirmed no synced lyrics".into());return remembered;}
         let preferred=fetch_qqmusic("https://c.y.qq.com",track,artist,duration);
-        trace(||format!("QQ音乐:{}",outcome(&preferred)));
+        trace(||format!("QQ Music:{}",outcome(&preferred)));
         if let Ok(lyrics)=&preferred {if lyrics.synced && !romanized(track,lyrics) {write_cache(&path,lyrics);return preferred;}}
         let (fallback,failed)=fetch_online_detail(track,artist,duration,Skip::QqMusic);
         if !failed && matches!(&preferred,Ok(_)|Err(FetchError::NotFound)) && !fallback.as_ref().is_ok_and(|l|l.synced) {
@@ -227,10 +227,10 @@ pub fn fetch_for_source(source:&str,track:&str,artist:&str,duration:f64,song_id:
     if source.eq_ignore_ascii_case("cloudmusic.exe"){
         if let Some(id)=song_id.filter(|id|*id>0){
             let path=crate::model::config_dir().join("lyrics").join(format!("netease-{id}.lrc"));
-            if let Some(lyrics)=read_cache(&path).filter(|lyrics|!romanized(track,lyrics)){trace(||"本地缓存:命中".into());return Ok(lyrics);}
-            if let Some(remembered)=read_negative(&path){trace(||"近期已确认无同步歌词".into());return remembered;}
+            if let Some(lyrics)=read_cache(&path).filter(|lyrics|!romanized(track,lyrics)){trace(||"Local cache:hit".into());return Ok(lyrics);}
+            if let Some(remembered)=read_negative(&path){trace(||"Recently confirmed no synced lyrics".into());return remembered;}
             let by_id=fetch_netease_song("https://music.163.com",id);
-            trace(||format!("网易云按ID:{}",outcome(&by_id)));
+            trace(||format!("NetEase by ID:{}",outcome(&by_id)));
             match by_id{
                 Ok(lyrics) if lyrics.synced=>{write_cache(&path,&lyrics);return Ok(lyrics);}
                 // 网易云本身只有文本歌词（「暂无自动滚动」）：不再重复搜网易云，改到 QQ 音乐、LRCLIB 找同步版本。
@@ -300,8 +300,8 @@ fn fetch_online_detail(track:&str,artist:&str,duration_secs:f64,skip:Skip)->(Res
     if track.trim().is_empty() || artist.trim().is_empty(){return (Err(FetchError::IncompleteMetadata),true);}
     let path=cache_path(track,artist,duration_secs);
     // 旧版本可能缓存过罗马音版本：忽略它重新查找原文。
-    if let Some(lyrics)=read_cache(&path).filter(|lyrics|!romanized(track,lyrics)){trace(||"本地缓存:命中".into());return (Ok(lyrics),false);}
-    if let Some(remembered)=read_negative(&path){trace(||"近期已确认无同步歌词".into());return (remembered,false);}
+    if let Some(lyrics)=read_cache(&path).filter(|lyrics|!romanized(track,lyrics)){trace(||"Local cache:hit".into());return (Ok(lyrics),false);}
+    if let Some(remembered)=read_negative(&path){trace(||"Recently confirmed no synced lyrics".into());return (remembered,false);}
     let netease=(skip!=Skip::Netease).then_some("https://music.163.com");
     let qq=(skip!=Skip::QqMusic).then_some("https://c.y.qq.com");
     let (result,failed)=fetch_with_sources_detail(netease,qq,Some("https://lrclib.net"),track,artist,duration_secs);
@@ -348,12 +348,12 @@ fn fetch_with_sources_detail(netease:Option<&str>,qq:Option<&str>,lrclib:Option<
     let mut plain=None;
     let mut transliterated=None;
     let mut failure=None;
-    let attempts:[(&str,Option<&str>,fn(&str,&str,&str,f64)->Result<Lyrics,FetchError>);3]=[("网易云",netease,fetch_netease),("QQ音乐",qq,fetch_qqmusic),("LRCLIB",lrclib,fetch_from)];
+    let attempts:[(&str,Option<&str>,fn(&str,&str,&str,f64)->Result<Lyrics,FetchError>);3]=[("NetEase",netease,fetch_netease),("QQ Music",qq,fetch_qqmusic),("LRCLIB",lrclib,fetch_from)];
     for (name,base,fetch) in attempts {
         let Some(base)=base else{continue;};
         let result=fetch(base,track,artist,duration);
         let roman=result.as_ref().is_ok_and(|lyrics|lyrics.synced && romanized(track,lyrics));
-        trace(||format!("{name}:{}{}",outcome(&result),if roman{"(罗马音)"}else{""}));
+        trace(||format!("{name}:{}{}",outcome(&result),if roman{"(romanized)"}else{""}));
         match result {
             // 罗马音版本先留作备选，继续向后面的来源找原文。
             Ok(lyrics) if roman=>{if transliterated.is_none(){transliterated=Some(lyrics);}}
@@ -439,7 +439,7 @@ fn fetch_netease(base:&str,track:&str,artist:&str,duration:f64)->Result<Lyrics,F
         let url=format!("{base}/api/search/get/web?s={}&type=1&limit=30",urlencode(&query));
         let result=match request_json(&url,base){Ok(result)=>result,Err(error) if i==0=>return Err(error),Err(_)=>break};
         if result.get("code").and_then(|v|v.as_i64())!=Some(200){
-            if i==0{return Err(FetchError::Unavailable("网易云搜索未成功".into()));}
+            if i==0{return Err(FetchError::Unavailable("NetEase search failed".into()));}
             break;
         }
         let items=result.pointer("/result/songs").and_then(|v|v.as_array()).cloned().unwrap_or_default();
@@ -461,7 +461,7 @@ fn fetch_netease(base:&str,track:&str,artist:&str,duration:f64)->Result<Lyrics,F
 
 fn fetch_netease_song(base:&str,id:u64)->Result<Lyrics,FetchError>{
     let result=request_json(&format!("{base}/api/song/lyric?id={id}&lv=-1&kv=-1&tv=-1"),base)?;
-    if result.get("code").and_then(|v|v.as_i64())!=Some(200){return Err(FetchError::Unavailable("网易云取词未成功".into()));}
+    if result.get("code").and_then(|v|v.as_i64())!=Some(200){return Err(FetchError::Unavailable("NetEase lyrics fetch failed".into()));}
     if result.get("nolyric").and_then(|v|v.as_bool())==Some(true) || result.get("uncollected").and_then(|v|v.as_bool())==Some(true){return Err(FetchError::NotFound);}
     let raw=result.pointer("/lrc/lyric").and_then(|v|v.as_str()).filter(|s|!s.trim().is_empty()).ok_or(FetchError::NotFound)?;
     Ok(lyrics_from_text(raw))
@@ -504,8 +504,8 @@ fn fetch_qqmusic(base:&str,track:&str,artist:&str,duration:f64)->Result<Lyrics,F
     let (query_title,query_artist)=search_terms(track,artist);
     let query=urlencode(&format!("{query_title} {query_artist}"));
     let result=request_json_with_retry(&format!("{base}/soso/fcgi-bin/client_search_cp?w={query}&format=json&p=1&n=12"),"https://y.qq.com/",true)?;
-    if result["code"].as_i64()!=Some(0){return Err(FetchError::Unavailable("QQ 音乐搜索未成功".into()));}
-    let items=result.pointer("/data/song/list").and_then(|v|v.as_array()).ok_or_else(||FetchError::InvalidResponse("QQ 音乐未返回歌曲列表".into()))?;
+    if result["code"].as_i64()!=Some(0){return Err(FetchError::Unavailable("QQ Music search failed".into()));}
+    let items=result.pointer("/data/song/list").and_then(|v|v.as_array()).ok_or_else(||FetchError::InvalidResponse("QQ Music returned no song list".into()))?;
     let mut plain=None;
     let mut failure=FetchError::NotFound;
     for mid in qq_candidates(items,track,artist,duration) {
@@ -513,7 +513,7 @@ fn fetch_qqmusic(base:&str,track:&str,artist:&str,duration:f64)->Result<Lyrics,F
             Ok(result)=>result,
             Err(error)=>{failure=error;continue;},
         };
-        if result["code"].as_i64()!=Some(0){failure=FetchError::Unavailable("QQ 音乐取词未成功".into());continue;}
+        if result["code"].as_i64()!=Some(0){failure=FetchError::Unavailable("QQ Music lyrics fetch failed".into());continue;}
         if let Some(raw)=result["lyric"].as_str().filter(|raw|!raw.trim().is_empty()) {
             let lyrics=lyrics_from_text(raw);
             if lyrics.synced{return Ok(lyrics);}
@@ -543,7 +543,7 @@ fn request_json_with_retry(url:&str,referer:&str,retry:bool)->Result<serde_json:
     use std::io::Read;
     let mut text=String::new();
     response.into_reader().take((2*MAX_TEXT+1)as u64).read_to_string(&mut text).map_err(|e|FetchError::InvalidResponse(e.to_string()))?;
-    if text.len()>2*MAX_TEXT{rejected_lyrics();return Err(FetchError::InvalidResponse("歌词响应超过大小上限".into()));}
+    if text.len()>2*MAX_TEXT{rejected_lyrics();return Err(FetchError::InvalidResponse("Lyrics response exceeds size limit".into()));}
     serde_json::from_str(&text).map_err(|e|FetchError::InvalidResponse(e.to_string()))
 }
 
@@ -575,7 +575,7 @@ fn search(base:&str,track:&str,artist:&str)->Result<Vec<serde_json::Value>,Fetch
         urlencode(artist)
     );
     let arr=request_json(&url,base)?;
-    arr.as_array().cloned().ok_or_else(||FetchError::InvalidResponse("预期歌词列表".into()))
+    arr.as_array().cloned().ok_or_else(||FetchError::InvalidResponse("Expected a lyrics list".into()))
 }
 
 fn lyrics_from_items(items:&[serde_json::Value],track:&str,duration_secs:f64)->Result<Lyrics,FetchError> {

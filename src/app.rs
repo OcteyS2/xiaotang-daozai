@@ -49,7 +49,7 @@ fn pill_shadow(painter:&egui::Painter,rect:Rect,radius:f32,strength:f32){
         painter.rect_filled(r,radius+grow*0.8,Color32::from_black_alpha((255.0*a*strength) as u8));
     }
 }
-pub(crate) const PAGE_NAMES: [&str; 8] = ["音乐", "专注", "饮水", "置物架", "待办", "邮箱", "AI 额度", "日程"];
+pub(crate) const PAGE_NAMES: [&str; 8] = ["Music", "Focus", "Water", "Shelf", "To-dos", "Mail", "AI Quota", "Schedule"];
 
 // ---------- 动效参数 ----------
 /// 悬停意图缓冲：光标停留这么久才真正展开（期间药丸轻微胀大作为反馈），防误触。
@@ -127,7 +127,7 @@ impl Env {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Messenger { Wechat, Qq }
 impl Messenger {
-    pub fn name(self)->&'static str {match self {Self::Wechat=>"微信",Self::Qq=>"QQ"}}
+    pub fn name(self)->&'static str {match self {Self::Wechat=>"WeChat",Self::Qq=>"QQ"}}
 }
 
 /// 一条未读：来源、账号所在进程（QQ 通知分不出账号，记为 0）和发出提醒的窗口（没有时为 0）。
@@ -416,8 +416,8 @@ pub(crate) enum Phase {
 impl Phase {
     pub(crate) fn label(self) -> &'static str {
         match self {
-            Phase::Focus => "专注时间",
-            Phase::Rest => "休息",
+            Phase::Focus => "Focus Time",
+            Phase::Rest => "Break",
         }
     }
 }
@@ -809,7 +809,7 @@ impl App {
             media: NowPlaying::default(),
             music_artwork: None,
             forced_open_until:0.0, settings_open:false, displays:Vec::new(), browser_at_top:false, browser_minimal_active:false, glass_tint:0.0, fluid:Default::default(), fluid_origin:Pos2::ZERO, fluid_art:None, fluid_title:String::new(), screen:None, settings_focus_requested:false, settings_tab:0, settings_category:0, wechat_status:String::new(), notification_apps:model::NotificationApps::load(), subpage:None, task_dialog:None,
-            listener_status: "尚未连接".into(),
+            listener_status: "Not connected".into(),
             notification_bell_until: 0.0, notification_bell_at: -10.0, notice: None, hud_notice: None, hud_alpha: 0.0, notice_width:Spring::new(0.0,CLOSE.0,CLOSE.1), notice_details:false, pending_messengers:Vec::new(), messenger_scroll:0.0, alerts: Default::default(), history: Default::default(), pending: vec![],
             todo_first: 0, todo_choosing: false, pet: Default::default(), last_drink: None,
             toast: None, toast_below: false,
@@ -841,7 +841,7 @@ impl App {
     }
 
     pub(crate) fn code_copied(&mut self, _code:&str) {
-        self.say("验证码已复制");
+        self.say("Verification code copied");
         self.toast_below = true;
     }
 
@@ -897,24 +897,24 @@ impl App {
                     let item=&self.mail.recent[0];
                     let body=format!("{} · {}",item.from,item.subject);
                     let body=item.code.as_ref().map(|code|crate::mail_privacy::mask(&body,code)).unwrap_or(body);
-                    self.alert("新邮件",body,5,false);
+                    self.alert("New Mail",body,5,false);
                     self.notification_bell_at = self.t;
                     self.notification_bell_until = self.t + 6.0;
                 }
             }
             mail::Event::Test { account, ok, note } => {
                 self.mail.testing = None;
-                let detail = if ok { "连接成功".to_string() } else { note };
+                let detail = if ok { "Connected".to_string() } else { note };
                 let detail = if detail.chars().count() > 120 {
                     format!("{}…", detail.chars().take(120).collect::<String>())
                 } else {
                     detail
                 };
-                self.mail.note = format!("{account}：{detail}");
+                self.mail.note = format!("{account}: {detail}");
                 self.say(if ok {
-                    format!("{account} 连接成功")
+                    format!("{account} connected")
                 } else {
-                    format!("{account} 连接失败")
+                    format!("{account} connection failed")
                 });
             }
         }
@@ -937,7 +937,7 @@ impl App {
                     return;
                 }
                 let Some(cfg) = config else {
-                    self.calendar.note = "服务器没有返回日历地址".into();
+                    self.calendar.note = "Server returned no calendar address".into();
                     self.calendar.note_error = true;
                     return;
                 };
@@ -946,7 +946,7 @@ impl App {
                     self.calendar.note_error = true;
                     return;
                 }
-                self.calendar.note = format!("已连接 · 未来 24 小时 {count} 个日程");
+                self.calendar.note = format!("Connected · {count} events in the next 24 hours");
                 self.calendar.note_error = false;
                 if self.calendar.config.as_ref()!=Some(&cfg) {
                     self.calendar.events.clear();
@@ -1024,7 +1024,7 @@ impl App {
         self.calendar.view.loading=self.calendar.feeds.iter().any(|feed|feed.month.loading);
         self.calendar.view.loaded=(!self.calendar.feeds.is_empty() && self.calendar.feeds.iter().all(|feed|feed.month.loaded==Some(month))).then_some(month);
         self.calendar.view.error=self.calendar.feeds.iter().filter(|feed|!feed.month.error.is_empty())
-            .map(|feed|format!("{}：{}",feed.config.provider.label(),feed.month.error)).collect::<Vec<_>>().join("；");
+            .map(|feed|format!("{}: {}",feed.config.provider.label(),feed.month.error)).collect::<Vec<_>>().join("; ");
     }
 
     pub(crate) fn select_calendar_provider(&mut self, provider: calendar::Provider) {
@@ -1100,7 +1100,7 @@ impl App {
             self.mail.form.provider = Provider::Qq;
             self.mail.form.email = "test@qq.com".into();
             self.mail.form.password = "invalid-auth-code".into();
-            self.mail.note = "test@qq.com：正在测试连接…".into();
+            self.mail.note = "test@qq.com: Testing connection…".into();
             self.pending.push(Cmd::MailTest(
                 Account { custom: None, email: "test@qq.com".into(), provider: Provider::Qq, enabled: true },
                 "invalid-auth-code".into(),
@@ -1170,7 +1170,7 @@ impl App {
                 uid: 900 - i as u32,
             })
             .collect();
-        self.mail.note = "demo@qq.com：连接成功".into();
+        self.mail.note = "demo@qq.com: Connected".into();
         self.page = 5;
         self.dots_target();
     }
@@ -1206,7 +1206,7 @@ impl App {
                 if let Some((u, p)) = calendar::parse_paste(&self.calendar.form.username) {
                     self.calendar.form.username = u;
                     self.calendar.form.password = p;
-                    self.calendar.note = "已从粘贴内容拆出用户名和密码，服务器地址已按平台填好".into();
+                    self.calendar.note = "Username and password extracted from pasted text; server address filled in for the platform".into();
                 }
             }
             "fail" => {
@@ -1251,8 +1251,8 @@ impl App {
         if !self.settings.bluetooth_notifications {
             self.bt_shown.clear();
             self.bt_initialized=false;
-            self.alerts.retain(|a|a.source!=crate::extras::AlertSource::Internal || a.title!="蓝牙设备");
-            if self.notice.as_ref().is_some_and(|a|a.source==crate::extras::AlertSource::Internal && a.title=="蓝牙设备") {self.notice=None;}
+            self.alerts.retain(|a|a.source!=crate::extras::AlertSource::Internal || a.title!="Bluetooth Device");
+            if self.notice.as_ref().is_some_and(|a|a.source==crate::extras::AlertSource::Internal && a.title=="Bluetooth Device") {self.notice=None;}
             return;
         }
         if !env.bt_ready { return; }
@@ -1412,8 +1412,8 @@ impl App {
         let title=lyrics.is_none();
         let text=if let Some((_,line))=current {line}
             else if let Some(lyrics)=lyrics {
-                if lyrics.index_at(self.lyric_position()).is_none() {"前奏"}
-                else {"间奏"}
+                if lyrics.index_at(self.lyric_position()).is_none() {"Intro"}
+                else {"Interlude"}
             } else {self.media.title.trim()};
         let ink=if current.is_some()||title{theme::WHITE}else{theme::GRAY};
         let layout=|text:String| {
@@ -1445,7 +1445,7 @@ impl App {
     fn lyric_focus_space(&self)->f32 {if self.pomo.running{crate::focus_bar::LYRIC_WIDTH+10.0}else{0.0}}
     fn lyric_bar_width(&self)->f32 {LYRIC_BAR_W+if self.pet_enabled(){48.0}else{0.0}+self.lyric_focus_space()}
     fn notice_size(&self,a:&Alert)->(f32,f32) {
-        let (width,height)=if a.meeting.is_some(){(360.0,136.0)}else if a.source==crate::extras::AlertSource::Internal && a.title=="蓝牙设备"{(HUD_W,48.0)}else if a.is_hud(){(HUD_W,38.0)}else{(334.0,44.0)};
+        let (width,height)=if a.meeting.is_some(){(360.0,136.0)}else if a.source==crate::extras::AlertSource::Internal && a.title=="Bluetooth Device"{(HUD_W,48.0)}else if a.is_hud(){(HUD_W,38.0)}else{(334.0,44.0)};
         (width,height)
     }
     pub fn set_pet(&mut self,enabled:bool) {
@@ -2025,8 +2025,8 @@ impl App {
                 inner.circle(x+10.0,cy+8.5,6.0,Color32::from_gray(238));
                 inner.centered_text(x+10.0,cy+8.5,&tag.to_string(),8.5,W::Bold,Color32::from_gray(28),H::Center);
             }
-            let name=match self.unread_tag(i){Some(n)=>format!("{} · 账号 {n}",u.source.name()),None=>u.source.name().to_string()};
-            let button=inner.hit(0.0,cy-slot/2.0,UNREAD_W,slot,self.unread_id(i)).on_hover_text(format!("查看{name}"));
+            let name=match self.unread_tag(i){Some(n)=>format!("{} · Account {n}",u.source.name()),None=>u.source.name().to_string()};
+            let button=inner.hit(0.0,cy-slot/2.0,UNREAD_W,slot,self.unread_id(i)).on_hover_text(format!("Open {name}"));
             if button.clicked(){cmds.push(Cmd::ViewMessenger(u));}
         }
         if max_scroll>0.0 {
@@ -2054,10 +2054,10 @@ impl App {
         let (w,h)=if horizontal {(self.unread_stack_len(true),BAR_H)}else{(32.0,self.unread_stack_len(false))};
         if count==1 {
             let u=self.pending_messengers[0];
-            let button=c.hit(0.0,0.0,w,h,u.source.name()).on_hover_text(format!("查看{}",u.source.name()));
+            let button=c.hit(0.0,0.0,w,h,u.source.name()).on_hover_text(format!("Open {}",u.source.name()));
             if button.clicked(){cmds.push(Cmd::ViewMessenger(u));}
         }else{
-            let button=c.hit(0.0,0.0,w,h,"messenger-stack").on_hover_text(format!("{count} 条未读 · 展开挑选"));
+            let button=c.hit(0.0,0.0,w,h,"messenger-stack").on_hover_text(format!("{count} unread · expand to choose"));
             if button.clicked(){self.reveal_unread();}
         }
     }
@@ -2383,14 +2383,14 @@ impl App {
     // 面板主体：页标题 + 页面（带切页过渡）+ 翻页箭头 + 页码豆
     // ---------------------------------------------------------------
     fn panel_body(&mut self, c: &Card, env: &Env, cmds: &mut Vec<Cmd>) {
-        let settings=c.hit(380.0,4.0,28.0,28.0,"page-settings").on_hover_text(format!("打开{}设置窗口",PAGE_NAMES[self.page]));
+        let settings=c.hit(380.0,4.0,28.0,28.0,"page-settings").on_hover_text(format!("Open {} settings",PAGE_NAMES[self.page]));
         let (hover,press)=c.hover_t(&settings);
         c.circle(394.0,18.0,13.0,Color32::from_white_alpha((hover*24.0) as u8));
         paint::gear(&c.scaled(394.0,18.0,0.8*(1.0-press*0.08)),394.0,18.0,paint::mix(theme::GRAY,theme::WHITE,hover));
         if settings.clicked(){self.settings_tab=[1,2,3,5,4,7,11,8][self.page];self.open_settings();}
         if self.subpage==Some(self.page) {
             c.text(15.0,25.0,"‹",19.0,W::Bold,theme::WHITE,H::Left);
-            c.text(37.0,25.0,if self.page==2{"饮水设置"}else{"专注设置"},size::TITLE,W::Bold,theme::WHITE,H::Left);
+            c.text(37.0,25.0,if self.page==2{"Water Settings"}else{"Focus Settings"},size::TITLE,W::Bold,theme::WHITE,H::Left);
             if c.hit(9.0,7.0,28.0,23.0,"subpage-back").clicked(){self.subpage=None;self.focus_editing=false;}
             self.page_settings(c);self.nav(c);return;
         }
@@ -2422,14 +2422,14 @@ impl App {
         let base = 25.0;
         let (a, b, col) = match page {
             0 | CALENDAR_PAGE => return,
-            1 => ("番茄", "专注", theme::RED_TOP),
-            2 => ("饮水", "提醒", theme::BLUE),
+            1 => ("Pomodoro", " Focus", theme::RED_TOP),
+            2 => ("Water", " Reminder", theme::BLUE),
             // 置物架的标题就是「置物架 | 剪贴板」分栏，由页面自己画。
             3 => return,
-            4 => ("待办", "清单", theme::GREEN),
-            5 => ("邮箱", "", theme::CYAN),
-            6 => ("AI", "额度", theme::SOFT_GREEN),
-            _ => ("岛仔", "设置", theme::WHITE),
+            4 => ("To-do", " List", theme::GREEN),
+            5 => ("Mail", "", theme::CYAN),
+            6 => ("AI", " Quota", theme::SOFT_GREEN),
+            _ => ("Daozai", " Settings", theme::WHITE),
         };
         let wa = c.text(15.0, base, a, size::TITLE, W::Bold, theme::WHITE, H::Left);
         if !b.is_empty() {
@@ -2534,7 +2534,7 @@ impl App {
                 self.pomo.phase = next;
                 self.pomo.remaining = self.phase_secs(next);
                 self.pomo.running = false;
-                self.alert("专注计时", format!("该{}了", next.label()), 1, true);
+                self.alert("Focus Timer", format!("Up next: {}", next.label()), 1, true);
             }
         }
         self.ring_shown.target = (self.pomo.remaining / self.phase_secs(self.pomo.phase)).clamp(0.0, 1.0);
@@ -2544,11 +2544,11 @@ impl App {
 
         if self.water.remind && self.water.percent() < 100.0 && self.water_hours(env.hour() as u32) && self.t - self.last_reminder >= self.settings.water_minutes as f64 * 60.0 {
             self.last_reminder = self.t;
-            self.alert("喝水时间到了", format!("休息一下，喝 {} ml 水吧", self.settings.serving_ml), 2, true);
+            self.alert("Time to Drink Water", format!("Take a break and drink {} ml of water", self.settings.serving_ml), 2, true);
         }
         let now = format!("{} {}", env.today, env.clock.get(..5).unwrap_or("00:00"));
         let due: Vec<_> = self.todos.items.iter().enumerate().filter(|(_, item)| item.reminder_due(&now)).map(|(i,item)| (i,item.text.clone())).collect();
-        for (i,text) in due { self.todos.items[i].mark_reminded(&now); self.todos.save(); self.alert("待办到时间了", text, 4, true); }
+        for (i,text) in due { self.todos.items[i].mark_reminded(&now); self.todos.save(); self.alert("To-do Due", text, 4, true); }
         // v0.5.5 会议提醒：.ics 里的开始时间，默认提前 15 分钟（可设 5/15/30）。
         // v0.5.6 起日历（CalDAV）事件走同一套：同一场会（UID + DTSTART）只提醒一次，
         // 邮件和日历两条来源撞上了也只弹一次。
@@ -2561,14 +2561,14 @@ impl App {
             let key=calendar::dedupe_key(&entry.event);
             let cutoff=if entry.event.all_day{at+60}else{entry.event.start+60};
             if now_ts>=at && now_ts<cutoff && !self.mail.fired.contains(&key) && seen.insert(key.clone()) {
-                picks.push((key,entry.event.clone(),"本机日程".into(),CALENDAR_PAGE));
+                picks.push((key,entry.event.clone(),"Local Calendar".into(),CALENDAR_PAGE));
             }
         }
         for (m,provider) in self.calendar_work_events(None) {
             let left = m.start - now_ts;
             let key = calendar::dedupe_key(m);
             if !m.all_day && left <= lead && left > -60 && !self.mail.fired.contains(&key) && seen.insert(key.clone()) {
-                let source=provider.map(|provider|provider.label()).unwrap_or("日历");
+                let source=provider.map(|provider|provider.label()).unwrap_or("Calendar");
                 picks.push((key, m.clone(), source.to_string(), CALENDAR_PAGE));
             }
         }
@@ -2577,7 +2577,7 @@ impl App {
                 let left = m.start - now_ts;
                 let key = calendar::dedupe_key(m);
                 if !m.all_day && left <= lead && left > -60 && !self.mail.fired.contains(&key) && seen.insert(key.clone()) {
-                    picks.push((key, m.clone(), "邮件邀请".to_string(), CALENDAR_PAGE));
+                    picks.push((key, m.clone(), "Mail Invite".to_string(), CALENDAR_PAGE));
                 }
             }
         }
@@ -2750,14 +2750,14 @@ impl App {
             }else{failed+=1;}
         }
         let message=if added==0 && failed==0 {
-            if duplicate==1{"该文件已在置物架中".into()}else{"这些文件已在置物架中".into()}
-        }else if added==0 && duplicate==0 {"文件不存在或无法访问".into()}
+            if duplicate==1{"This file is already on the Shelf".into()}else{"These files are already on the Shelf".into()}
+        }else if added==0 && duplicate==0 {"File doesn't exist or can't be accessed".into()}
         else {
             let mut parts=Vec::new();
-            if added>0{parts.push(format!("已添加 {added} 个文件"));}
-            if duplicate>0{parts.push(format!("{duplicate} 个已存在"));}
-            if failed>0{parts.push(format!("{failed} 个无法添加"));}
-            parts.join("，")
+            if added>0{parts.push(format!("Added {added} file(s)"));}
+            if duplicate>0{parts.push(format!("{duplicate} already there"));}
+            if failed>0{parts.push(format!("{failed} couldn't be added"));}
+            parts.join(", ")
         };
         self.say(message);
         if added>0 {
@@ -2776,7 +2776,7 @@ impl App {
             .margin(egui::Margin::ZERO)
             .text_color(theme::WHITE)
             .font(theme::font(size::BODY, W::Regular))
-            .hint_text(egui::RichText::new("要做点什么？回车保存").color(theme::DIM).font(theme::font(size::BODY, W::Regular)))
+            .hint_text(egui::RichText::new("What needs doing? Press Enter to save").color(theme::DIM).font(theme::font(size::BODY, W::Regular)))
             .desired_width(rect.width());
         let resp = ui.put(rect, te);
         let first_focus=!self.todo_input_focused;

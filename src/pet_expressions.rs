@@ -79,7 +79,7 @@ impl Expressions {
     pub fn draw(&mut self,c:&Card,cx:f32,palette:Option<Palette>)->bool {
         let Some((expression,time))=self.clip else{return false;};
         if self.atlas.as_ref().is_none_or(|(previous,_)|*previous!=palette) {
-            let decoded=image::load_from_memory(include_bytes!("../assets/pet/expressions.png")).expect("内置表情图集").into_rgba8();
+            let decoded=image::load_from_memory(include_bytes!("../assets/pet/expressions.png")).expect("Built-in expression atlas").into_rgba8();
             let mut image=egui::ColorImage::from_rgba_unmultiplied([decoded.width() as usize,decoded.height() as usize],decoded.as_raw());
             if let Some(palette)=palette {for pixel in &mut image.pixels {if pixel.a()>0 {*pixel=crate::skin_paint::map_color(*pixel,&palette);}}}
             if let Some((previous,texture))=&mut self.atlas {*previous=palette;texture.set(image,egui::TextureOptions::LINEAR);}

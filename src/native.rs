@@ -131,7 +131,7 @@ fn compositor_blur_allowed() -> bool {
         if let (Some(at), Some(last)) = (at, last) { if at.elapsed() < Duration::from_secs(2) { return last; } }
         let allowed = system_transparency() != Some(false);
         if last.is_some_and(|last| last != allowed) || last.is_none() && !allowed {
-            glass_diagnostic(if allowed { "系统透明效果已开启，恢复合成引擎模糊" } else { "系统透明效果关闭，不使用合成引擎模糊" });
+            glass_diagnostic(if allowed { "System transparency effects on; restoring compositor blur" } else { "System transparency effects off; not using compositor blur" });
         }
         cache.set((Some(std::time::Instant::now()), Some(allowed)));
         allowed
@@ -144,10 +144,10 @@ fn glass_diagnostic(message: &str) {
     let path = crate::model::config_dir().join("glass-diagnostics.txt");
     if std::fs::metadata(&path).is_ok_and(|m| m.len() > 64 * 1024) { let _ = std::fs::write(&path, b""); }
     let transparency = {
-        match system_transparency() { Some(true) => "开", Some(false) => "关", None => "未知" }
+        match system_transparency() { Some(true) => "on", Some(false) => "off", None => "unknown" }
     };
     if let Ok(mut file) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
-        let _ = writeln!(file, "{} · {} · 系统透明效果：{}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), message, transparency);
+        let _ = writeln!(file, "{} · {} · System transparency: {}", chrono::Local::now().format("%Y-%m-%d %H:%M:%S"), message, transparency);
     }
 }
 
@@ -371,7 +371,7 @@ impl Window {
             unsafe{(gl.get_parameter_string(eframe::glow::VENDOR),gl.get_parameter_string(eframe::glow::RENDERER))}
         }).unwrap_or_default();
         let opaque_surface=surface_needs_outline_clip(backend,&vendor,&renderer);
-        if opaque_surface{glass_diagnostic("渲染兼容：已启用岛体轮廓裁剪，避免透明画布出现黑块");}
+        if opaque_surface{glass_diagnostic("Render compatibility: island outline clipping enabled to avoid black blocks on transparent canvas");}
         watch_drag(hwnd,cc.egui_ctx.clone());
         Some(Self { hwnd, region: (i32::MIN, 0, 0, 0), expanded: false, hook, browser_state:(None,PollClock::default()), drag_capture:DragCapture::default(), glass:None, backdrop:None, blur:false, blur_unavailable:false, opaque_surface })
     }
@@ -454,11 +454,11 @@ impl Window {
                 if self.backdrop.is_none() {
                     match crate::composition::Backdrop::new() {
                         Ok(backdrop) => {
-                            glass_diagnostic("合成引擎模糊底板已创建");
+                            glass_diagnostic("Compositor blur backdrop created");
                             self.backdrop = Some(backdrop);
                         }
                         Err(error) => {
-                            glass_diagnostic(&format!("合成引擎模糊层创建失败：{error:?}"));
+                            glass_diagnostic(&format!("Compositor blur layer creation failed: {error:?}"));
                             self.blur_unavailable = true;
                         }
                     }
@@ -467,7 +467,7 @@ impl Window {
                     match backdrop.show(self.hwnd, &crate::app::blur_pieces(shapes, ppp)) {
                         Ok(()) => self.blur = true,
                         Err(error) => {
-                            glass_diagnostic(&format!("模糊层更新失败：{error:?}"));
+                            glass_diagnostic(&format!("Blur layer update failed: {error:?}"));
                             backdrop.hide();
                             self.blur = false;
                             self.blur_unavailable = true;

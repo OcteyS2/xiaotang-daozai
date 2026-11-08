@@ -10,17 +10,17 @@ impl Credits {
     pub fn full(&self)->String{let text=super::deepseek::Balance{currency:"CNY".into(),total:self.remaining,granted:0.0,topped_up:0.0}.full(self.remaining);text.trim_start_matches('¥').trim_end_matches('0').trim_end_matches('.').to_owned()}
 }
 pub fn parse(value:&Value)->Result<Snapshot,String>{
-    if value["code"].as_i64()!=Some(0){return Err("WorkBuddy 积分接口暂未返回结果，请稍后重试".into());}
-    let data=&value["data"];let rows=data["Packages"].as_array().ok_or("积分接口缺少资源包数据")?;
+    if value["code"].as_i64()!=Some(0){return Err("WorkBuddy credits API returned no result yet. Please try again later".into());}
+    let data=&value["data"];let rows=data["Packages"].as_array().ok_or("Credits API is missing package data")?;
     let mut packages=Vec::new();let mut remaining=0.0;
     for row in rows{
-        let amount=row["CycleRemainCapacity"].as_f64().or_else(||row["CycleRemainCapacity"].as_str().and_then(|s|s.parse().ok())).filter(|n|n.is_finite()&&*n>=0.0).ok_or("积分余额字段无效")?;
+        let amount=row["CycleRemainCapacity"].as_f64().or_else(||row["CycleRemainCapacity"].as_str().and_then(|s|s.parse().ok())).filter(|n|n.is_finite()&&*n>=0.0).ok_or("Invalid credit balance field")?;
         remaining+=amount;packages.push((row["PackageCode"].as_str().unwrap_or_default().into(),amount));
     }
-    if !remaining.is_finite(){return Err("积分余额超出范围".into());}
+    if !remaining.is_finite(){return Err("Credit balance out of range".into());}
     if let Some(groups)=data["CreditGroups"].as_array(){
         packages.clear();for group in groups{
-            let label=match group["Kind"].as_str(){Some("plan_base")=>"套餐",Some("plan_bonus")=>"加赠",Some("addon")=>"加量包",Some("benefit")=>"赠送",_=>continue};
+            let label=match group["Kind"].as_str(){Some("plan_base")=>"Plan",Some("plan_bonus")=>"Plan bonus",Some("addon")=>"Add-on pack",Some("benefit")=>"Bonus",_=>continue};
             if let Some(amount)=group["CycleRemainCapacity"].as_f64().or_else(||group["CycleRemainCapacity"].as_str().and_then(|s|s.parse::<f64>().ok())).filter(|n|n.is_finite()&&*n>0.0){packages.push((label.into(),amount));}
         }
     }else{packages.clear();}
@@ -40,14 +40,14 @@ struct Auth{
 }
 
 fn session_path(id:&str)->Result<std::path::PathBuf,String>{
-    if id.len()!=64 || !id.bytes().all(|c|c.is_ascii_hexdigit()){return Err("WorkBuddy 账号标识无效".into());}
+    if id.len()!=64 || !id.bytes().all(|c|c.is_ascii_hexdigit()){return Err("Invalid WorkBuddy account ID".into());}
     Ok(crate::model::config_dir().join("credentials").join(format!("workbuddy-{id}.bin")))
 }
 fn save_session(id:&str,session:&Session)->Result<(),String>{
     let path=session_path(id)?;
-    let bytes=serde_json::to_vec(session).map_err(|_|"登录会话无效")?;
+    let bytes=serde_json::to_vec(session).map_err(|_|"Invalid login session")?;
     let encrypted=super::gemini::protect(&bytes,true)?;
-    std::fs::create_dir_all(path.parent().unwrap()).and_then(|_|crate::model::atomic_write(&path,&encrypted)).map_err(|_|"无法保存 WorkBuddy 登录会话".into())
+    std::fs::create_dir_all(path.parent().unwrap()).and_then(|_|crate::model::atomic_write(&path,&encrypted)).map_err(|_|"Can't save WorkBuddy login session".into())
 }
 pub fn forget(account:&Account){
     if let Some(path)=account.slot.as_deref().and_then(|id|session_path(id).ok()){let _=std::fs::remove_file(path);}
@@ -55,7 +55,7 @@ pub fn forget(account:&Account){
 const SUMMARY:&str="/billing/meter/get-user-resource-summary";
 enum Failure { Transport, Expired, Message(String) }
 impl Failure {
-    fn message(self)->String{match self{Self::Transport=>"暂时无法连接 WorkBuddy 官网".into(),Self::Expired=>"官网登录已过期，请重新连接 WorkBuddy".into(),Self::Message(s)=>s}}
+    fn message(self)->String{match self{Self::Transport=>"Can't reach the WorkBuddy website right now".into(),Self::Expired=>"Website login expired. Please reconnect WorkBuddy".into(),Self::Message(s)=>s}}
 }
 fn api(agent:&ureq::Agent,session:&Session,path:&str)->Result<Value,Failure>{
     let url=format!("{}{path}",session.origin);
@@ -66,25 +66,25 @@ fn api(agent:&ureq::Agent,session:&Session,path:&str)->Result<Value,Failure>{
     }
     let response=if path==SUMMARY{req.set("Content-Type","application/json").send_string("{}")}else{req.call()}.map_err(|e|match e{
         ureq::Error::Status(401,_)=>Failure::Expired,
-        ureq::Error::Status(code,_)=>Failure::Message(format!("WorkBuddy 官网返回 {code}，请稍后重试")),
+        ureq::Error::Status(code,_)=>Failure::Message(format!("WorkBuddy website returned {code}. Please try again later")),
         _=>Failure::Transport
     })?;
-    serde_json::from_reader(response.into_reader().take(2*1024*1024)).map_err(|_|Failure::Message("WorkBuddy 官网返回了无效数据".into()))
+    serde_json::from_reader(response.into_reader().take(2*1024*1024)).map_err(|_|Failure::Message("WorkBuddy website returned invalid data".into()))
 }
 fn verified(agent:&ureq::Agent,s:&Session,id:&str)->Result<Snapshot,Failure>{
     if let Some(auth)=&s.auth{
-        if slot(&auth.uid)!=id{return Err(Failure::Message("WorkBuddy 授权账号不匹配".into()));}
+        if slot(&auth.uid)!=id{return Err(Failure::Message("WorkBuddy authorized account mismatch".into()));}
         return parse(&api(agent,s,SUMMARY)?).map_err(Failure::Message);
     }
     let profile=api(agent,s,"/console/account")?;
-    let uid=profile.pointer("/data/uid").and_then(Value::as_str).ok_or_else(||Failure::Message("官网未返回 WorkBuddy 账号信息".into()))?;
+    let uid=profile.pointer("/data/uid").and_then(Value::as_str).ok_or_else(||Failure::Message("Website returned no WorkBuddy account info".into()))?;
     if slot(uid)!=id || profile.pointer("/data/isCurrentOneIdEnterprise")==Some(&Value::Bool(true)){
-        return Err(Failure::Message("官网账号与已绑定的个人账号不一致".into()));
+        return Err(Failure::Message("Website account differs from the linked personal account".into()));
     }
     parse(&api(agent,s,SUMMARY)?).map_err(Failure::Message)
 }
 fn query(agent:&ureq::Agent,s:&Session,id:&str)->Result<Snapshot,Failure>{
-    if !valid_origin(&s.origin){return Err(Failure::Message("WorkBuddy 登录来源无效".into()));}
+    if !valid_origin(&s.origin){return Err(Failure::Message("Invalid WorkBuddy login origin".into()));}
     with_transport_retry(agent,&s.origin,|agent|verified(agent,s,id))
 }
 fn with_transport_retry<T>(agent:&ureq::Agent,origin:&str,request:impl Fn(&ureq::Agent)->Result<T,Failure>)->Result<T,Failure>{
@@ -102,26 +102,26 @@ fn with_transport_retry<T>(agent:&ureq::Agent,origin:&str,request:impl Fn(&ureq:
     if ips.is_empty(){return result;}
     let endpoint=format!("{host}:443");
     let direct=ureq::AgentBuilder::new().try_proxy_from_env(false).timeout(Duration::from_secs(12)).redirects(0)
-        .resolver(move |name:&str|if name==endpoint{Ok(ips.clone())}else{Err(std::io::Error::other("官网地址不匹配"))}).build();
+        .resolver(move |name:&str|if name==endpoint{Ok(ips.clone())}else{Err(std::io::Error::other("Website address mismatch"))}).build();
     request(&direct)
 }
 // 只读取客户端当前会话；未知加密格式交给独立官网登录，不改写客户端文件。
 fn local_snapshot(agent:&ureq::Agent,expected:Option<&str>)->Result<(String,Snapshot),String>{
-    let base=std::env::var_os("LOCALAPPDATA").ok_or("未找到本机用户目录")?;
+    let base=std::env::var_os("LOCALAPPDATA").ok_or("Local user folder not found")?;
     let path=std::path::PathBuf::from(base).join("CodeBuddyExtension/Data/Public/auth/workbuddy-desktop-ai.info");
-    if path.with_extension("info.logged-out").exists(){return Err("WorkBuddy 客户端已退出登录".into());}
-    let raw=std::fs::read(&path).map_err(|_|"未找到 WorkBuddy 客户端登录")?;
-    let root:Value=serde_json::from_slice(&raw).map_err(|_|"无法读取 WorkBuddy 客户端登录")?;
-    let uid=root.pointer("/account/uid").and_then(Value::as_str).ok_or("客户端尚未登录")?;
+    if path.with_extension("info.logged-out").exists(){return Err("WorkBuddy client is signed out".into());}
+    let raw=std::fs::read(&path).map_err(|_|"WorkBuddy client login not found")?;
+    let root:Value=serde_json::from_slice(&raw).map_err(|_|"Can't read WorkBuddy client login")?;
+    let uid=root.pointer("/account/uid").and_then(Value::as_str).ok_or("Client not signed in yet")?;
     let id=slot(uid);
-    if expected.is_some_and(|s|s!=id){return Err("客户端当前账号与已绑定账号不同".into());}
-    if root.pointer("/account/isCurrentOneIdEnterprise")==Some(&Value::Bool(true)){return Err("请使用 WorkBuddy 个人账号".into());}
-    let token=root.pointer("/auth/accessToken").and_then(Value::as_str).filter(|s|!s.is_empty()).ok_or("客户端登录已加密，请通过官网连接")?;
+    if expected.is_some_and(|s|s!=id){return Err("Client's current account differs from the linked account".into());}
+    if root.pointer("/account/isCurrentOneIdEnterprise")==Some(&Value::Bool(true)){return Err("Please use a personal WorkBuddy account".into());}
+    let token=root.pointer("/auth/accessToken").and_then(Value::as_str).filter(|s|!s.is_empty()).ok_or("Client login is encrypted. Please connect via the website")?;
     let domain=root.pointer("/auth/domain").and_then(Value::as_str).unwrap_or_default();
     let response=agent.post("https://www.codebuddy.cn/billing/meter/get-user-resource-summary")
         .set("Authorization",&format!("Bearer {token}")).set("X-User-Id",uid).set("X-Domain",domain)
-        .set("Content-Type","application/json").send_string("{}").map_err(|_|"暂时无法使用客户端登录查询积分")?;
-    let value:Value=serde_json::from_reader(response.into_reader().take(2*1024*1024)).map_err(|_|"客户端积分响应无效")?;
+        .set("Content-Type","application/json").send_string("{}").map_err(|_|"Can't query credits with the client login right now")?;
+    let value:Value=serde_json::from_reader(response.into_reader().take(2*1024*1024)).map_err(|_|"Invalid client credits response")?;
     Ok((id,parse(&value)?))
 }
 fn refresh_auth(agent:&ureq::Agent,session:&Session)->Result<Auth,Failure>{
@@ -133,25 +133,25 @@ fn refresh_auth(agent:&ureq::Agent,session:&Session)->Result<Auth,Failure>{
             .map_err(|e|match e{
                 ureq::Error::Transport(_)=>Failure::Transport,
                 ureq::Error::Status(401|403,_)=>Failure::Expired,
-                _=>Failure::Message("WorkBuddy 登录服务暂不可用，请稍后重试".into()),
+                _=>Failure::Message("WorkBuddy login service unavailable. Please try again later".into()),
             })
     })?;
-    let value:Value=serde_json::from_reader(response.into_reader().take(2*1024*1024)).map_err(|_|Failure::Message("WorkBuddy 刷新响应无效".into()))?;
-    let mut next:Auth=serde_json::from_value(value["data"].clone()).map_err(|_|Failure::Message("WorkBuddy 授权已失效，请重新连接".into()))?;
+    let value:Value=serde_json::from_reader(response.into_reader().take(2*1024*1024)).map_err(|_|Failure::Message("Invalid WorkBuddy refresh response".into()))?;
+    let mut next:Auth=serde_json::from_value(value["data"].clone()).map_err(|_|Failure::Message("WorkBuddy authorization expired. Please reconnect".into()))?;
     next.uid=auth.uid.clone();
     if next.refresh_token.is_empty(){next.refresh_token=auth.refresh_token.clone();}
     if next.domain.is_empty(){next.domain=auth.domain.clone();}
-    if next.access_token.is_empty(){return Err(Failure::Message("WorkBuddy 未返回有效刷新凭据".into()));}
+    if next.access_token.is_empty(){return Err(Failure::Message("WorkBuddy returned no valid refresh credentials".into()));}
     Ok(next)
 }
 pub fn fetch(agent:&ureq::Agent,account:&Account)->Result<Snapshot,(String,u64)>{
-    let id=account.slot.as_deref().ok_or(("请连接 WorkBuddy 浏览器账号".into(),0))?;
+    let id=account.slot.as_deref().ok_or(("Please connect a WorkBuddy browser account".into(),0))?;
     if let Ok((_,snapshot))=local_snapshot(agent,Some(id)){return Ok(snapshot);}
     let path=session_path(id).map_err(|e|(e,0))?;
     match std::fs::read(&path){
         Ok(bytes)=>{
             let raw=super::gemini::protect(&bytes,false).map_err(|e|(e,30))?;
-            let mut session:Session=serde_json::from_slice(&raw).map_err(|_|("保存的 WorkBuddy 会话无效，请重新连接".into(),0))?;
+            let mut session:Session=serde_json::from_slice(&raw).map_err(|_|("Saved WorkBuddy session is invalid. Please reconnect".into(),0))?;
             match query(agent,&session,id){
                 Ok(snapshot)=>return Ok(snapshot),
                 Err(Failure::Expired)=>{
@@ -174,9 +174,9 @@ pub fn fetch(agent:&ureq::Agent,account:&Account)->Result<Snapshot,(String,u64)>
             }
         },
         Err(e) if e.kind()==std::io::ErrorKind::NotFound=>{},
-        Err(_)=>return Err(("无法读取已保存的 WorkBuddy 会话".into(),30))
+        Err(_)=>return Err(("Can't read saved WorkBuddy session".into(),30))
     }
-    Err(("WorkBuddy 登录已过期或尚未连接，请点击重新连接".into(),60))
+    Err(("WorkBuddy login expired or not connected. Click to reconnect".into(),60))
 }
 #[cfg(windows)]
 #[path="workbuddy_login.rs"]
@@ -198,7 +198,7 @@ impl Connect {
                 Err(_)=>login::connect(expected.as_deref(),worker_cancel)?,
             };
             #[cfg(not(windows))]
-            let (slot,snapshot):(String,Snapshot)=return Err("WorkBuddy 登录暂仅支持 Windows".into());
+            let (slot,snapshot):(String,Snapshot)=return Err("WorkBuddy login is Windows-only for now".into());
             Ok(Connected{slot,label:if alias.trim().is_empty(){"WorkBuddy".into()}else{alias.trim().into()},snapshot})
         })();let _=tx.send(result);});Self{rx,cancel}
     }

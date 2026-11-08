@@ -22,7 +22,7 @@ impl Node {
         if value.is_empty() { Err(invalid()) } else { Ok(value) }
     }
 }
-fn invalid() -> Failure { Failure::text("日历服务器返回的数据不完整，请稍后重试") }
+fn invalid() -> Failure { Failure::text("Calendar server returned incomplete data, please retry later") }
 fn node(page: u8, tag: u8, value: &str, children: Vec<Node>) -> Node {
     Node { page, tag, value: value.into(), children }
 }
@@ -85,7 +85,7 @@ fn decode(bytes: &[u8]) -> Result<Node, Failure> {
 fn endpoint(cfg: &Config) -> Result<url::Url, Failure> {
     let base = url::Url::parse(&cfg.base()).map_err(|_| invalid())?;
     let local = base.host_str().is_some_and(|h| h.parse::<std::net::IpAddr>().is_ok_and(|ip| ip.is_loopback()));
-    if !(base.scheme() == "https" || base.scheme() == "http" && local) || !base.username().is_empty() || base.password().is_some() { return Err(Failure::text("日历服务器地址不安全")); }
+    if !(base.scheme() == "https" || base.scheme() == "http" && local) || !base.username().is_empty() || base.password().is_some() { return Err(Failure::text("Calendar server address is insecure")); }
     // 用户可能直接粘贴完整的 ActiveSync 地址；只填主机名时补上标准路径。
     if base.path().trim_end_matches('/').to_ascii_lowercase().ends_with("/microsoft-server-activesync") {
         let mut full = base; full.set_query(None); full.set_fragment(None);
@@ -112,7 +112,7 @@ impl<'a> Session<'a> {
     fn provision(&mut self) -> Result<(), Failure> {
         self.provisioned = true;
         let label = self.cfg.provider.label();
-        let refused = || Failure::text(format!("{label}要求设备满足安全策略（如锁屏密码、远程擦除），岛仔不执行这些管控；请联系管理员允许不受管控的设备"));
+        let refused = || Failure::text(format!("{label} requires the device to meet security policies (e.g. lock-screen password, remote wipe), which Daozai doesn't enforce; ask your admin to allow unmanaged devices"));
         let first = command(&self.agent, self.cfg, self.password, "Provision", &provision_request(None), None)?;
         // 服务器下发远程擦除时绝不执行，直接停止同步。
         if first.child(PROVISION, 0x0c).is_some() { return Err(refused()); }
@@ -155,14 +155,14 @@ fn command(agent: &ureq::Agent, cfg: &Config, password: &str, name: &str, root: 
     if response.status() != 200 { return Err(Failure::status(cfg.provider, response.status())); }
     let mut bytes = Vec::new();
     response.into_reader().take(16 * 1024 * 1024 + 1).read_to_end(&mut bytes).map_err(|_| Failure::transport("Exchange"))?;
-    if bytes.len() > 16 * 1024 * 1024 { return Err(Failure::text(format!("{}单次返回的日程过多，无法完整同步", cfg.provider.label()))); }
+    if bytes.len() > 16 * 1024 * 1024 { return Err(Failure::text(format!("{} returned too many events at once to sync completely", cfg.provider.label()))); }
     decode(&bytes)
 }
 fn check_status(n: &Node, page: u8, tag: u8, label: &str) -> Result<(), Failure> {
     match n.required(page, tag)? {
         "1" => Ok(()),
-        code if NEEDS_PROVISION.contains(&code) => Err(Failure::text(format!("{label}要求设备满足安全策略，岛仔不执行这些管控；请联系管理员允许不受管控的设备"))),
-        code => Err(Failure::text(format!("{label}同步失败（Exchange {code}），请检查日历授权后重试"))),
+        code if NEEDS_PROVISION.contains(&code) => Err(Failure::text(format!("{label} requires the device to meet security policies, which Daozai doesn't enforce; ask your admin to allow unmanaged devices"))),
+        code => Err(Failure::text(format!("{label} sync failed (Exchange {code}). Check calendar authorization and retry"))),
     }
 }
 fn sync_request(id: &str, key: &str) -> Node {
@@ -196,7 +196,7 @@ fn sync_folder(session: &mut Session, id: &str, label: &str) -> Result<std::coll
     let mut key = "0".to_string();
     let mut items = std::collections::BTreeMap::new();
     for batch in 0..101 {
-        if batch == 100 { return Err(Failure::text(format!("{label}日程数量过多，无法完整同步"))); }
+        if batch == 100 { return Err(Failure::text(format!("{label} has too many events to sync completely"))); }
         let result = session.send("Sync", &sync_request(id, &key))?;
         if result.child(AIR, 0x0e).is_some() { check_status(&result, AIR, 0x0e, label)?; }
         let collection = result.child(AIR, 0x1c).and_then(|n| n.child(AIR, 0x0f)).ok_or_else(invalid)?;
@@ -237,12 +237,12 @@ pub(super) fn fetch(cfg: &Config, password: &str, lo: DateTime<Utc>, hi: DateTim
     let mut report = Vec::new();
     for folder in &all {
         let name: String = folder.name.chars().take(20).collect();
-        if folder.id.is_empty() || !is_calendar(folder, &all) { report.push(format!("{name}[类型{} 跳过]", folder.kind)); continue; }
+        if folder.id.is_empty() || !is_calendar(folder, &all) { report.push(format!("{name}[type {} skipped]", folder.kind)); continue; }
         calendars += 1;
         // 单个日历读取失败（权限、只读共享等）不影响其他日历；全部失败才报错。
         let items = match sync_folder(&mut session, &folder.id, label) {
             Ok(items) => items,
-            Err(error) => { report.push(format!("{name}[类型{} 失败:{}]", folder.kind, error.message)); first_error.get_or_insert(error); continue; }
+            Err(error) => { report.push(format!("{name}[type {} failed:{}]", folder.kind, error.message)); first_error.get_or_insert(error); continue; }
         };
         let mut ics = String::from("BEGIN:VCALENDAR\nVERSION:2.0\n");
         for (server_id, item) in &items {
@@ -252,16 +252,16 @@ pub(super) fn fetch(cfg: &Config, password: &str, lo: DateTime<Utc>, hi: DateTim
         ics.push_str("END:VCALENDAR");
         let xml = format!("<calendar-data>{}</calendar-data>", ics.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;"));
         match super::events_in_range(&xml, lo, hi) {
-            Ok(found) => { report.push(format!("{name}[类型{} 同步{}条]", folder.kind, items.len())); synced += 1; events.extend(found); }
-            Err(error) => { report.push(format!("{name}[类型{} 失败:{}]", folder.kind, error.message)); first_error.get_or_insert(error); }
+            Ok(found) => { report.push(format!("{name}[type {} synced {} items]", folder.kind, items.len())); synced += 1; events.extend(found); }
+            Err(error) => { report.push(format!("{name}[type {} failed:{}]", folder.kind, error.message)); first_error.get_or_insert(error); }
         }
     }
     // 本机诊断：服务器返回了哪些文件夹、类型、是否同步及条数，不记录日程内容和密码。
-    let line = format!("{} {label} 文件夹{}个：{}{}\n", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
-        all.len(), report.iter().take(40).cloned().collect::<Vec<_>>().join(" "), if skipped > 0 { format!(" 跳过无法解析的日程{skipped}条") } else { String::new() });
+    let line = format!("{} {label} {} folders: {}{}\n", std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs(),
+        all.len(), report.iter().take(40).cloned().collect::<Vec<_>>().join(" "), if skipped > 0 { format!(" skipped {skipped} unparseable events") } else { String::new() });
     // 测试用模拟服务器时不写，免得把模拟数据混进用户的真实诊断日志。
     if !cfg!(test) { crate::resources::append_log(&crate::model::config_dir().join("diagnostics"), "calendar.log", &line); }
-    if calendars == 0 { return Err(Failure::text(if cfg.provider == Provider::WeCom {"企业微信未返回可同步的日历，请确认已开启日程同步".to_string()}else{format!("{label}账号下没有可同步的日历")})); }
+    if calendars == 0 { return Err(Failure::text(if cfg.provider == Provider::WeCom {"WeCom returned no syncable calendars. Make sure schedule sync is turned on".to_string()}else{format!("No syncable calendars in the {label} account")})); }
     if synced == 0 { return Err(first_error.unwrap_or_else(invalid)); }
     events.sort_by_key(|m| m.start);
     let mut seen = std::collections::HashSet::new();
@@ -275,8 +275,8 @@ fn date(value: &str) -> Result<DateTime<Utc>, Failure> {
 fn escaped(value: &str) -> String { value.replace('\\', "\\\\").replace('\r', "").replace('\n', "\\n").replace(';', "\\;").replace(',', "\\,") }
 fn recurrence(n: &Node) -> Result<String, Failure> {
     let kind = n.required(CAL, 0x1c)?;
-    let freq = match kind { "0" => "DAILY", "1" => "WEEKLY", "2" | "3" => "MONTHLY", "5" | "6" => "YEARLY", _ => return Err(Failure::text("暂不支持返回的重复日程类型")) };
-    if !matches!(n.text(CAL, 0x37), "" | "0" | "1") { return Err(Failure::text("暂不支持非公历的重复日程")); }
+    let freq = match kind { "0" => "DAILY", "1" => "WEEKLY", "2" | "3" => "MONTHLY", "5" | "6" => "YEARLY", _ => return Err(Failure::text("Unsupported recurring event type returned")) };
+    if !matches!(n.text(CAL, 0x37), "" | "0" | "1") { return Err(Failure::text("Non-Gregorian recurring events aren't supported yet")); }
     let mut rule = format!("RRULE:FREQ={freq}");
     for (tag, name) in [(0x1f, "INTERVAL"), (0x1e, "COUNT"), (0x21, "BYMONTHDAY"), (0x23, "BYMONTH")] {
         if !n.text(CAL, tag).is_empty() {
@@ -315,13 +315,13 @@ fn event_ics(item: &Node, fallback_uid: &str) -> Result<String, Failure> {
         let number = |at| i32::from_le_bytes(bytes[at..at+4].try_into().unwrap()) as i64;
         offset = -(number(0) + number(84)) * 60;
         if item.child(CAL, 0x1b).is_some() && bytes[154..156] != [0, 0] {
-            return Err(Failure::text("暂不支持含夏令时切换的重复日程"));
+            return Err(Failure::text("Recurring events spanning DST changes aren't supported yet"));
         }
     }
     // 按日历时区展开重复规则，避免 UTC 日期跨日后把周几或月日算错。
     let recurring = item.child(CAL, 0x1b).is_some();
     let recurrence_zone = if recurring && offset != 0 && !all_day {
-        if offset % 3600 != 0 || !(-12*3600..=14*3600).contains(&offset) { return Err(Failure::text("暂不支持此时区的重复日程")); }
+        if offset % 3600 != 0 || !(-12*3600..=14*3600).contains(&offset) { return Err(Failure::text("Recurring events in this time zone aren't supported yet")); }
         Some(format!("Etc/GMT{:+}", -offset / 3600))
     } else { None };
     let time_line = |name: &str, at: DateTime<Utc>| {

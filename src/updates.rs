@@ -36,7 +36,7 @@ impl State {
                 Some(Ok(event)) => event,
                 Some(Err(mpsc::TryRecvError::Disconnected)) => {
                     self.rx = None; self.cancel = None;
-                    self.message = "检查或下载已中断，请重试。".into(); break;
+                    self.message = "Check or download was interrupted. Please try again.".into(); break;
                 }
                 _ => break,
             };
@@ -51,12 +51,12 @@ impl State {
                 Event::Ready(work) => {
                     if self.cancel.as_ref().is_some_and(|cancel| cancel.load(Ordering::Relaxed)) {
                         self.rx = None; self.cancel = None;
-                        self.message = "下载已取消".into();
+                        self.message = "Download canceled".into();
                         let _ = std::fs::remove_dir_all(work);
                         continue;
                     }
                     let (tx, rx) = mpsc::channel(); self.rx = Some(rx); self.cancel = None;
-                    self.message = "正在准备重启…".into();
+                    self.message = "Preparing to restart…".into();
                     let ctx = ctx.clone();
                     std::thread::spawn(move || {
                         let event = match launch_installer(&work) { Ok(()) => Event::Installed, Err(error) => Event::Failed(error) };
@@ -73,7 +73,7 @@ impl State {
     }
 
     pub(crate) fn ui(&mut self, ui: &mut egui::Ui) {
-        if ui.add_enabled(self.rx.is_none(), egui::Button::new("检查更新")).clicked() {
+        if ui.add_enabled(self.rx.is_none(), egui::Button::new("Check for Updates")).clicked() {
             let (tx, rx) = mpsc::channel(); self.rx = Some(rx);
             self.message.clear(); self.result = None; self.dialog_open = false;
             let ctx = ui.ctx().clone();
@@ -81,13 +81,13 @@ impl State {
         }
         match &self.result {
             Some(Ok(Some(release))) => {
-                if ui.button(format!("发现新版本 {} · 查看更新", release.version)).clicked() {
+                if ui.button(format!("New version {} · View update", release.version)).clicked() {
                     self.dialog_open = true; self.focus_requested = true;
                 }
             }
-            Some(Ok(None)) => { ui.label("当前已是最新版本"); }
-            Some(Err(message)) => { ui.label(message); ui.hyperlink_to("打开发布页", RELEASES); }
-            None if self.rx.is_some() => { ui.label("正在检查…"); }
+            Some(Ok(None)) => { ui.label("You’re up to date"); }
+            Some(Err(message)) => { ui.label(message); ui.hyperlink_to("Open Releases Page", RELEASES); }
+            None if self.rx.is_some() => { ui.label("Checking…"); }
             _ => {}
         }
         ui.add_space(5.0);
@@ -109,7 +109,7 @@ impl State {
         }).id();
         let installing = self.rx.is_some() && self.cancel.is_none();
         ctx.show_viewport_immediate(egui::ViewportId::from_hash_of("daozai-update"),
-            egui::ViewportBuilder::default().with_title("岛仔更新").with_icon(theme::app_icon())
+            egui::ViewportBuilder::default().with_title("Daozai Update").with_icon(theme::app_icon())
                 .with_inner_size([520.0, 416.0]).with_resizable(false).with_decorations(false)
                 .with_transparent(true).with_active(true), |ctx, _| {
                 if focus {
@@ -127,7 +127,7 @@ impl State {
                     ui.painter().rect_filled(window, 22.0, egui::Color32::from_rgb(25,25,28));
                     ui.painter().rect_stroke(window, 22.0, egui::Stroke::new(1.0, egui::Color32::from_rgb(55,55,61)), egui::StrokeKind::Inside);
                     let close_rect = egui::Rect::from_min_size(window.right_top()+egui::vec2(-42.0,12.0),egui::vec2(28.0,28.0));
-                    let close = ui.interact(close_rect, ui.id().with("update-close"), egui::Sense::click()).on_hover_text("关闭");
+                    let close = ui.interact(close_rect, ui.id().with("update-close"), egui::Sense::click()).on_hover_text("Close");
                     if close.hovered() { ui.painter().rect_filled(close_rect, 8.0, theme::BTN_HOVER); }
                     let center = close_rect.center();
                     for direction in [-1.0,1.0] {
@@ -151,7 +151,7 @@ impl State {
                             ui.image((logo,egui::vec2(52.0,52.0)));
                             ui.add_space(4.0);
                             ui.vertical(|ui| {
-                                ui.label(egui::RichText::new("岛仔有新版本了").font(theme::font(21.0,W::Semibold)));
+                                ui.label(egui::RichText::new("A new Daozai is available").font(theme::font(21.0,W::Semibold)));
                                 ui.horizontal(|ui| {
                                     ui.label(egui::RichText::new(option_env!("DAOZAI_BUILD_LABEL").unwrap_or(env!("CARGO_PKG_VERSION"))).color(theme::DIM));
                                     ui.label(egui::RichText::new("→").color(theme::DIM));
@@ -166,10 +166,10 @@ impl State {
                         egui::Frame::new().fill(egui::Color32::from_rgb(35,35,39)).corner_radius(12.0)
                             .inner_margin(16.0).show(ui, |ui| {
                                 ui.set_min_width(ui.available_width());
-                                ui.label(egui::RichText::new("本次更新").color(theme::GRAY).font(theme::font(11.5,W::Semibold)));
+                                ui.label(egui::RichText::new("What’s New").color(theme::GRAY).font(theme::font(11.5,W::Semibold)));
                                 egui::ScrollArea::vertical().id_salt("update-notes").max_height(96.0).min_scrolled_height(96.0)
                                     .auto_shrink([false,false]).show(ui, |ui| {
-                                        if release.notes.trim().is_empty() { ui.label("新版本已准备好。"); }
+                                        if release.notes.trim().is_empty() { ui.label("The new version is ready."); }
                                         else { for line in release.notes.lines() {
                                             let line = line.trim();
                                             if line.is_empty() { ui.add_space(3.0); continue; }
@@ -182,18 +182,18 @@ impl State {
                                     });
                             });
                         ui.add_space(4.0);
-                        ui.label(egui::RichText::new(if self.message.is_empty(){"更新后自动重启，设置和记录会保留。"}else{&self.message}).color(theme::DIM).size(11.5));
+                        ui.label(egui::RichText::new(if self.message.is_empty(){"Daozai restarts after updating; your settings and data are kept."}else{&self.message}).color(theme::DIM).size(11.5));
                         if self.cancel.is_some() {
                             ui.add(egui::ProgressBar::new(self.progress).fill(theme::BLUE).desired_height(8.0));
                             ui.horizontal(|ui| {
-                                ui.label(egui::RichText::new(if self.progress==0.0{"正在连接下载服务器…".into()}else if self.progress<1.0{format!("正在下载更新 · {:.0}%",self.progress*100.0)}else{"正在校验安装包…".into()}).color(theme::GRAY));
-                                if ui.button("取消下载").clicked() { self.cancel.as_ref().unwrap().store(true,Ordering::Relaxed); }
+                                ui.label(egui::RichText::new(if self.progress==0.0{"Connecting to download server…".into()}else if self.progress<1.0{format!("Downloading update · {:.0}%",self.progress*100.0)}else{"Verifying package…".into()}).color(theme::GRAY));
+                                if ui.button("Cancel Download").clicked() { self.cancel.as_ref().unwrap().store(true,Ordering::Relaxed); }
                             });
                         } else {
                             ui.add_space(4.0);
                             ui.horizontal(|ui| {
-                                if ui.add_enabled(!installing,egui::Button::new("稍后").fill(theme::BTN).min_size(egui::vec2(110.0,40.0))).clicked() { self.dismiss(); }
-                                let install = egui::Button::new(egui::RichText::new(if installing{"正在准备重启…"}else{"下载并安装"}).color(theme::WHITE))
+                                if ui.add_enabled(!installing,egui::Button::new("Later").fill(theme::BTN).min_size(egui::vec2(110.0,40.0))).clicked() { self.dismiss(); }
+                                let install = egui::Button::new(egui::RichText::new(if installing{"Preparing to restart…"}else{"Download & Install"}).color(theme::WHITE))
                                     .fill(theme::BLUE).min_size(egui::vec2(ui.available_width(),40.0));
                                 if ui.add_enabled(release.package.is_some() && self.rx.is_none(),install).clicked() {
                                     let (tx,rx)=mpsc::channel(); self.rx=Some(rx);
@@ -209,13 +209,13 @@ impl State {
                         }
                         ui.add_space(2.0);
                         ui.horizontal(|ui| {
-                            ui.hyperlink_to(egui::RichText::new("网盘下载").size(11.5).color(theme::BLUE),BACKUP_DOWNLOAD);
+                            ui.hyperlink_to(egui::RichText::new("Cloud Drive Download").size(11.5).color(theme::BLUE),BACKUP_DOWNLOAD);
                             ui.label(egui::RichText::new("·").color(theme::DIM));
-                            ui.hyperlink_to(egui::RichText::new("浏览器下载").size(11.5).color(theme::GRAY),&release.page);
+                            ui.hyperlink_to(egui::RichText::new("Download in Browser").size(11.5).color(theme::GRAY),&release.page);
                             ui.label(egui::RichText::new("·").color(theme::DIM));
-                            ui.hyperlink_to(egui::RichText::new("查看发布说明").size(11.5).color(theme::GRAY),&release.page);
+                            ui.hyperlink_to(egui::RichText::new("View Release Notes").size(11.5).color(theme::GRAY),&release.page);
                         });
-                        if release.package.is_none() { ui.label(egui::RichText::new("此版本请通过浏览器下载。").size(11.5).color(theme::DIM)); }
+                        if release.package.is_none() { ui.label(egui::RichText::new("Please download this version in your browser.").size(11.5).color(theme::DIM)); }
                     });
                     if self.rx.is_some() { ctx.request_repaint_after(Duration::from_millis(100)); }
                 });
@@ -257,7 +257,7 @@ fn clip_update_window(rect: egui::Rect, scale: f32) {
     unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> BOOL {
         let mut title = [0u16; 64];
         let len = GetWindowTextW(hwnd, &mut title) as usize;
-        if String::from_utf16_lossy(&title[..len]) != "岛仔更新" { return BOOL(1); }
+        if String::from_utf16_lossy(&title[..len]) != "Daozai Update" { return BOOL(1); }
         let &(rect, scale) = &*(data.0 as *const (egui::Rect, f32));
         let region = update_window_region(rect, scale);
         let old = CreateRectRgn(0, 0, 0, 0);
@@ -286,7 +286,7 @@ fn update_agent(proxy: Option<&str>, timeout: Duration) -> Result<ureq::Agent, S
     let mut builder = ureq::AgentBuilder::new().try_proxy_from_env(false)
         .timeout_connect(Duration::from_secs(20)).timeout_read(timeout).timeout_write(timeout);
     if let Some(proxy) = proxy {
-        builder = builder.proxy(ureq::Proxy::new(proxy).map_err(|_| "代理地址无效，请检查代理设置后重试")?);
+        builder = builder.proxy(ureq::Proxy::new(proxy).map_err(|_| "Invalid proxy address. Check your proxy settings and try again")?);
     }
     Ok(builder.build())
 }
@@ -302,12 +302,12 @@ fn check() -> Result<Option<Release>, String> {
     let response = http_agent()?
         .get(API).set("User-Agent", concat!("Daozai/", env!("CARGO_PKG_VERSION")))
         .set("Accept", "application/vnd.github+json").call().map_err(|error| match error {
-            ureq::Error::Status(403 | 429, _) => "检查过于频繁，请稍后重试".to_owned(),
-            ureq::Error::Status(404, _) => "暂未找到正式版本，请查看发布页".to_owned(),
-            _ => "无法连接更新服务，请检查网络或代理后重试".to_owned(),
+            ureq::Error::Status(403 | 429, _) => "Checking too often. Please try again later".to_owned(),
+            ureq::Error::Status(404, _) => "No stable release found yet. See the releases page".to_owned(),
+            _ => "Can’t reach the update service. Check your network or proxy and try again".to_owned(),
         })?;
     let value: serde_json::Value = serde_json::from_reader(response.into_reader())
-        .map_err(|_| "更新信息格式异常，请稍后重试".to_owned())?;
+        .map_err(|_| "Unexpected update info format. Please try again later".to_owned())?;
     release_info(&value, env!("CARGO_PKG_VERSION"))
 }
 
@@ -328,21 +328,21 @@ fn release_info(value: &serde_json::Value, current: &str) -> Result<Option<Relea
 }
 
 fn download(release: &Release, tx: &mpsc::Sender<Event>, cancel: &AtomicBool) -> Result<PathBuf, String> {
-    let package = release.package.as_ref().ok_or("请通过浏览器下载此版本")?;
-    let root = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).ok_or("无法找到更新缓存目录")?.join("Daozai/Updates");
+    let package = release.package.as_ref().ok_or("Please download this version in your browser")?;
+    let root = std::env::var_os("LOCALAPPDATA").map(PathBuf::from).ok_or("Can’t find the update cache folder")?.join("Daozai/Updates");
     let work = root.join(format!("{}-{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos()));
-    std::fs::create_dir_all(&work).map_err(|_| "无法创建更新缓存")?;
+    std::fs::create_dir_all(&work).map_err(|_| "Can’t create the update cache")?;
     let result = (|| {
         let response = http_agent()?
-            .get(&package.url).call().map_err(|_| "连接下载服务器失败，请检查网络或代理，或使用网盘下载")?;
-        if !response.get_url().starts_with("https://") { return Err("更新下载未使用安全连接".into()); }
+            .get(&package.url).call().map_err(|_| "Can’t connect to the download server. Check your network or proxy, or use the cloud drive download")?;
+        if !response.get_url().starts_with("https://") { return Err("Update download isn’t using a secure connection".into()); }
         let mut input = response.into_reader();
-        let mut output = std::fs::File::create(work.join("update.zip")).map_err(|_| "无法保存更新包")?;
+        let mut output = std::fs::File::create(work.join("update.zip")).map_err(|_| "Can’t save the update package")?;
         transfer(&mut input, &mut output, package, cancel, |progress| { let _ = tx.send(Event::Progress(progress)); })?;
-        std::fs::write(work.join("apply.ps1"), concat!("\u{feff}", include_str!("../installer/update.ps1"))).map_err(|_| "无法准备更新程序")?;
-        std::fs::write(work.join("version.txt"), release.version.trim_start_matches('v')).map_err(|_| "无法保存更新信息")?;
-        std::fs::write(work.join("hash.txt"), &package.hash).map_err(|_| "无法保存校验信息")?;
-        if cancel.load(Ordering::Relaxed) { return Err("下载已取消".into()); }
+        std::fs::write(work.join("apply.ps1"), concat!("\u{feff}", include_str!("../installer/update.ps1"))).map_err(|_| "Can’t prepare the updater")?;
+        std::fs::write(work.join("version.txt"), release.version.trim_start_matches('v')).map_err(|_| "Can’t save update info")?;
+        std::fs::write(work.join("hash.txt"), &package.hash).map_err(|_| "Can’t save checksum info")?;
+        if cancel.load(Ordering::Relaxed) { return Err("Download canceled".into()); }
         Ok(work.clone())
     })();
     if result.is_err() { let _ = std::fs::remove_dir_all(&work); }
@@ -353,29 +353,29 @@ fn transfer(input: &mut impl Read, output: &mut impl Write, package: &Package, c
     let mut hash = ring::digest::Context::new(&ring::digest::SHA256);
     let mut buffer = [0u8; 65536]; let mut total = 0u64;
     loop {
-        if cancel.load(Ordering::Relaxed) { return Err("下载已取消".into()); }
-        let length = input.read(&mut buffer).map_err(|_| "下载中断或等待超时，请重试或使用网盘下载")?;
+        if cancel.load(Ordering::Relaxed) { return Err("Download canceled".into()); }
+        let length = input.read(&mut buffer).map_err(|_| "Download interrupted or timed out. Try again or use the cloud drive download")?;
         if length == 0 { break; }
         total += length as u64;
-        if total > package.size { return Err("更新包大小不符，请重新下载".into()); }
-        output.write_all(&buffer[..length]).map_err(|_| "无法保存更新包，请检查磁盘空间")?;
+        if total > package.size { return Err("Update package size mismatch. Please download again".into()); }
+        output.write_all(&buffer[..length]).map_err(|_| "Can’t save the update package. Check your disk space")?;
         hash.update(&buffer[..length]); progress(total as f32 / package.size as f32);
     }
     let digest: String = hash.finish().as_ref().iter().map(|b| format!("{b:02x}")).collect();
-    if total != package.size || digest != package.hash { return Err("更新包不完整或校验失败，请重新下载".into()); }
+    if total != package.size || digest != package.hash { return Err("Update package incomplete or failed verification. Please download again".into()); }
     Ok(())
 }
 
 #[cfg(windows)]
 fn launch_installer(work: &std::path::Path) -> Result<(), String> {
     use std::os::windows::process::CommandExt;
-    let target = std::env::current_exe().map_err(|_| "无法找到当前程序")?;
-    let shell = std::env::var_os("SystemRoot").map(PathBuf::from).ok_or("无法找到 Windows 目录")?
+    let target = std::env::current_exe().map_err(|_| "Can’t find the current program")?;
+    let shell = std::env::var_os("SystemRoot").map(PathBuf::from).ok_or("Can’t find the Windows folder")?
         .join("System32/WindowsPowerShell/v1.0/powershell.exe");
     let mut child = std::process::Command::new(shell).args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File"])
         .arg(work.join("apply.ps1")).arg("-WorkPath").arg(work).arg("-TargetExe").arg(target)
         .arg("-ParentProcessId").arg(std::process::id().to_string()).creation_flags(0x08000000)
-        .spawn().map_err(|_| "无法启动更新程序，请通过浏览器下载安装")?;
+        .spawn().map_err(|_| "Can’t start the updater. Please download and install from your browser")?;
     // 脚本先确认缓存和安装目录可用，再允许主程序退出。
     for _ in 0..100 {
         if work.join("ready").exists() { return Ok(()); }
@@ -383,10 +383,10 @@ fn launch_installer(work: &std::path::Path) -> Result<(), String> {
         std::thread::sleep(Duration::from_millis(50));
     }
     let _ = child.kill();
-    Err(std::fs::read_to_string(work.join("error.txt")).unwrap_or_else(|_| "无法准备安装，请通过浏览器下载后安装".into()))
+    Err(std::fs::read_to_string(work.join("error.txt")).unwrap_or_else(|_| "Can’t prepare the installation. Please download and install from your browser".into()))
 }
 #[cfg(not(windows))]
-fn launch_installer(_: &std::path::Path) -> Result<(), String> { Err("仅支持 Windows 应用内更新".into()) }
+fn launch_installer(_: &std::path::Path) -> Result<(), String> { Err("In-app updates are only supported on Windows".into()) }
 
 fn version(value: &str) -> Option<[u64; 3]> {
     let mut parts = value.strip_prefix('v').unwrap_or(value).split('.');
@@ -400,7 +400,7 @@ fn version(value: &str) -> Option<[u64; 3]> {
 }
 
 fn parse_release(value: &serde_json::Value, current: &str) -> Result<Option<String>, String> {
-    let invalid = || "更新信息格式异常，请稍后重试".to_owned();
+    let invalid = || "Unexpected update info format. Please try again later".to_owned();
     if value["draft"].as_bool() != Some(false) || value["prerelease"].as_bool() != Some(false) {
         return Err(invalid());
     }

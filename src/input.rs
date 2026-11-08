@@ -9,8 +9,8 @@ pub struct State {
 }
 impl State {
     fn label(self)->&'static str {
-        if self.native==Some(false){return "英语";}
-        match self.layout&0x3ff {4=>"中文",9=>"英语",17=>"日语",18=>"韩语",_=>"已切换"}
+        if self.native==Some(false){return "English";}
+        match self.layout&0x3ff {4=>"Chinese",9=>"English",17=>"Japanese",18=>"Korean",_=>"Switched"}
     }
     #[cfg(windows)]
     pub fn read()->Option<Self>{Self::read_details(true)}

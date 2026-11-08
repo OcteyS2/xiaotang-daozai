@@ -151,7 +151,7 @@ impl Monitor {
                     let line=record(value);
                     let _=append(&directory,&line);
                     if value.abnormal(){let _=std::fs::write(directory.join("last-resource-anomaly.log"),&line);interval=Duration::from_secs(5);}
-                    if GUARD.observe(&value){let _=std::fs::write(directory.join("resource-guard.log"),format!("已自动暂停音乐信息、封面与歌词读取\n{line}"));}
+                    if GUARD.observe(&value){let _=std::fs::write(directory.join("resource-guard.log"),format!("Music info, cover and lyrics reading paused automatically\n{line}"));}
                 }
                 if rx.recv_timeout(interval)!=Err(std::sync::mpsc::RecvTimeoutError::Timeout){break;}
             }

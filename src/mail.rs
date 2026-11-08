@@ -58,13 +58,13 @@ impl Provider {
 
     pub fn label(self) -> &'static str {
         match self {
-            Provider::Qq => "QQ 邮箱",
-            Provider::Mail163 => "163 邮箱",
-            Provider::Mail126 => "126 邮箱",
-            Provider::Exmail => "腾讯企业邮",
-            Provider::ICloud => "iCloud 邮箱",
+            Provider::Qq => "QQ Mail",
+            Provider::Mail163 => "163 Mail",
+            Provider::Mail126 => "126 Mail",
+            Provider::Exmail => "Tencent Exmail",
+            Provider::ICloud => "iCloud Mail",
             Provider::Gmail => "Gmail",
-            Provider::Custom => "自定义 IMAP",
+            Provider::Custom => "Custom IMAP",
         }
     }
 
@@ -92,23 +92,23 @@ impl Provider {
     /// 设置界面的操作指引。
     pub fn hint(self) -> &'static str {
         match self {
-            Provider::Custom => "向学校或单位管理员确认 IMAP 主机、TLS 端口及用户名。仅支持连接即加密的 IMAP over TLS（通常 993）与 LOGIN/应用专用密码。严格校验证书；不支持明文、STARTTLS、OAuth2 或网页登录/SSO。修改服务器或用户名必须重新输入该目标的授权码。",
-            Provider::Qq => "1. 登录 QQ 邮箱网页版，点右上角「设置」→ 左侧「账号与安全」。\n2. 在新页面选「安全设置」，向下找到「POP3/IMAP/SMTP/Exchange/CardDAV 服务」；未开启时先按提示开启。\n3. 点「生成授权码」，完成验证后复制到下方。这里填写授权码，不是 QQ 密码或邮箱独立密码。",
-            Provider::Mail163 | Provider::Mail126 => "1. 登录对应的网易邮箱网页版，点顶部「设置」→「POP3/SMTP/IMAP」。\n2. 确认「IMAP/SMTP 服务」已开启；首次开启时按提示完成验证。\n3. 在「授权密码管理」中点「新增授权密码」，完成验证后复制到下方。填写客户端授权码，不是邮箱登录密码。",
-            Provider::Exmail => "1. 登录腾讯企业邮网页版，在「设置」→「收发信设置」检查 IMAP/SMTP 服务。\n2. 常见网页版在「设置」→「邮箱绑定」→「客户端专用密码」→「生成新密码」获取密码；启用安全登录后须使用专用密码。\n3. 企业版本和管理员策略可能不同。找不到入口或服务被禁用时，请让企业管理员确认客户端接入方式，不要照搬 QQ 邮箱的路径。",
-            Provider::ICloud => "1. 登录 Apple 账户页面，进入「登录和安全」→「App 专用密码」。\n2. 选择「生成 App 专用密码」，按提示填写名称并完成验证；账户需已开启双重认证。\n3. 邮箱栏填写完整的 iCloud 邮箱地址，下方填写刚生成的 App 专用密码，不是 Apple 账户密码。",
-            Provider::Gmail => "1. 登录 Google 账户，进入「安全性与登录」→「您的 Google 账号登录选项」→「开启两步验证」，按提示完成设置。\n2. 打开下方「应用专用密码」页面，输入应用名称（例如：岛仔）并创建，复制生成的 16 位应用专用密码。\n3. 邮箱栏填完整 Gmail 地址，下方填应用专用密码，不是 Google 登录密码。若没有创建入口，请检查组织账号限制、高级保护或仅使用安全密钥的验证设置。",
+            Provider::Custom => "Confirm the IMAP host, TLS port and username with your school or organization admin. Only implicit-TLS IMAP (IMAP over TLS, usually 993) with LOGIN/app passwords is supported. Certificates are strictly verified; plaintext, STARTTLS, OAuth2 and web login/SSO are not supported. Changing the server or username requires re-entering the authorization code for that target.",
+            Provider::Qq => "1. Sign in to QQ Mail on the web, click 「Settings」 at the top right → 「Account & Security」 on the left.\n2. On the new page choose 「Security Settings」 and scroll to 「POP3/IMAP/SMTP/Exchange/CardDAV Service」; if it is off, turn it on as prompted.\n3. Click 「Generate Authorization Code」, complete verification and paste it below. Enter the authorization code here, not your QQ password or mailbox password.",
+            Provider::Mail163 | Provider::Mail126 => "1. Sign in to your NetEase mailbox on the web and click 「Settings」 at the top →「POP3/SMTP/IMAP」.\n2. Make sure 「IMAP/SMTP Service」 is on; when turning it on for the first time, complete verification as prompted.\n3. In 「Authorization Password Management」 click 「Add Authorization Password」, complete verification and paste it below. Enter the client authorization code, not your mailbox login password.",
+            Provider::Exmail => "1. Sign in to Tencent Exmail on the web and check the IMAP/SMTP service under 「Settings」→「Send & Receive Settings」.\n2. On the usual web version, get a password via 「Settings」→「Mailbox Binding」→「Client-Specific Password」→「Generate New Password」; once secure login is enabled, a client-specific password is required.\n3. Enterprise editions and admin policies may differ. If you can’t find the entry or the service is disabled, ask your admin how clients should connect; don’t follow the QQ Mail steps.",
+            Provider::ICloud => "1. Sign in to your Apple Account page and go to 「Sign-In and Security」→「App-Specific Passwords」.\n2. Choose 「Generate an app-specific password」, enter a name and complete verification as prompted; the account must have two-factor authentication enabled.\n3. Enter your full iCloud email address in the email field and the newly generated app-specific password below, not your Apple Account password.",
+            Provider::Gmail => "1. Sign in to your Google Account, go to 「Security」→「How you sign in to Google」→「2-Step Verification」 and finish setup as prompted.\n2. Open the 「App passwords」 page below, enter an app name (e.g. Daozai), create it and copy the generated 16-character app password.\n3. Enter your full Gmail address in the email field and the app password below, not your Google password. If there is no option to create one, check for organization account restrictions, Advanced Protection, or security-key-only verification settings.",
         }
     }
 
     pub fn setup_link(self) -> (&'static str, &'static str) {
         match self {
-            Provider::Qq => ("打开 QQ 邮箱网页版", "https://mail.qq.com/"),
-            Provider::Mail163 => ("打开 163 邮箱网页版", "https://mail.163.com/"),
-            Provider::Mail126 => ("打开 126 邮箱网页版", "https://mail.126.com/"),
-            Provider::Exmail => ("打开腾讯企业邮网页版", "https://exmail.qq.com/"),
-            Provider::ICloud => ("打开 Apple 账户", "https://account.apple.com/"),
-            Provider::Gmail => ("打开应用专用密码", "https://myaccount.google.com/apppasswords"),
+            Provider::Qq => ("Open QQ Mail on the Web", "https://mail.qq.com/"),
+            Provider::Mail163 => ("Open 163 Mail on the Web", "https://mail.163.com/"),
+            Provider::Mail126 => ("Open 126 Mail on the Web", "https://mail.126.com/"),
+            Provider::Exmail => ("Open Tencent Exmail on the Web", "https://exmail.qq.com/"),
+            Provider::ICloud => ("Open Apple Account", "https://account.apple.com/"),
+            Provider::Gmail => ("Open App Passwords", "https://myaccount.google.com/apppasswords"),
             Provider::Custom => ("", ""),
         }
     }
@@ -143,14 +143,14 @@ impl Default for CustomImap {fn default()->Self{Self{host:String::new(),port:993
 impl Account {
     pub fn endpoint(&self)->Result<(String,u16,String),String>{
         if self.provider!=Provider::Custom {return Ok((self.provider.host().into(),self.provider.port(),self.email.clone()));}
-        let c=self.custom.as_ref().ok_or("请填写自定义 IMAP 连接配置")?;
+        let c=self.custom.as_ref().ok_or("Please fill in the custom IMAP connection settings")?;
         let host=c.host.trim().to_ascii_lowercase();
         if host.is_empty() || host.len()>253 || !host.split('.').all(|label|!label.is_empty() && label.len()<=63 && !label.starts_with('-') && !label.ends_with('-') && label.bytes().all(|b|b.is_ascii_alphanumeric()||b==b'-')) {
-            return Err("IMAP 主机必须是域名或 IPv4 地址，不要填写网址、端口、路径或账号".into());
+            return Err("IMAP host must be a domain name or IPv4 address; don’t enter a URL, port, path or account".into());
         }
-        if c.port==0 || c.port==143{return Err("仅支持 IMAP over TLS（通常 993），不支持 143/STARTTLS 或明文连接".into());}
+        if c.port==0 || c.port==143{return Err("Only IMAP over TLS (usually 993) is supported; 143/STARTTLS and plaintext connections are not".into());}
         let user=if c.username.trim().is_empty(){self.email.trim()}else{c.username.trim()};
-        if user.is_empty() || user.len()>256 || user.chars().any(char::is_control){return Err("IMAP 用户名无效".into());}
+        if user.is_empty() || user.len()>256 || user.chars().any(char::is_control){return Err("Invalid IMAP username".into());}
         Ok((host,c.port,user.into()))
     }
     /// Custom secrets are bound to the TLS endpoint and exact login identity.
@@ -233,11 +233,11 @@ pub enum Status {
 impl Status {
     pub fn label(&self) -> String {
         match self {
-            Status::Idle => "未连接".into(),
-            Status::Connecting => "连接中…".into(),
-            Status::Ready => "已连接".into(),
-            Status::Auth(msg) => format!("需要授权码：{msg}"),
-            Status::Failed(msg) => format!("连接失败：{msg}"),
+            Status::Idle => "Not connected".into(),
+            Status::Connecting => "Connecting…".into(),
+            Status::Ready => "Connected".into(),
+            Status::Auth(msg) => format!("Authorization code required: {msg}"),
+            Status::Failed(msg) => format!("Connection failed: {msg}"),
         }
     }
     pub fn ok(&self) -> bool {
@@ -540,13 +540,13 @@ fn event_of(fields: &[(String, String)]) -> Option<Meeting> {
     let all_day=get("DTSTART").is_some_and(|value|!value.contains('T'));
     let end = parse_time("DTEND").map(|at|at.timestamp()).filter(|end|*end>naive.timestamp())
         .or_else(||all_day.then(||naive.date_naive().succ_opt()?.and_hms_opt(0,0,0)?.and_local_timezone(chrono::Local).earliest().map(|at|at.timestamp())).flatten());
-    let title = get("SUMMARY").map(|v| ics_text(&v)).filter(|t| !t.is_empty()).unwrap_or_else(|| "会议".to_string());
+    let title = get("SUMMARY").map(|v| ics_text(&v)).filter(|t| !t.is_empty()).unwrap_or_else(|| "Meeting".to_string());
     Some(Meeting {
         all_day,
         title,
         start: naive.timestamp(),
         end,
-        at: naive.format(if all_day {"%m-%d 全天"}else{"%m-%d %H:%M"}).to_string(),
+        at: naive.format(if all_day {"%m-%d All day"}else{"%m-%d %H:%M"}).to_string(),
         uid: get("UID").unwrap_or_default(),
     })
 }
@@ -578,14 +578,14 @@ pub mod secrets {
     /// 凭据只进 Windows 凭据管理器；键是邮箱地址，值是授权码。
     pub fn save(email: &str, password: &str) -> Result<(), String> {
         let entry = keyring::Entry::new(super::SERVICE, &email.to_ascii_lowercase())
-            .map_err(|e| format!("凭据管理器不可用：{e}"))?;
-        entry.set_password(password).map_err(|e| format!("保存授权码失败：{e}"))
+            .map_err(|e| format!("Credential Manager unavailable: {e}"))?;
+        entry.set_password(password).map_err(|e| format!("Failed to save authorization code: {e}"))
     }
 
     pub fn load(email: &str) -> Result<String, String> {
         let entry = keyring::Entry::new(super::SERVICE, &email.to_ascii_lowercase())
-            .map_err(|e| format!("凭据管理器不可用：{e}"))?;
-        entry.get_password().map_err(|_| "没有保存授权码".to_string())
+            .map_err(|e| format!("Credential Manager unavailable: {e}"))?;
+        entry.get_password().map_err(|_| "No saved authorization code".to_string())
     }
 
     pub fn delete(email: &str) {
@@ -598,10 +598,10 @@ pub mod secrets {
 #[cfg(not(windows))]
 pub mod secrets {
     pub fn save(_email: &str, _password: &str) -> Result<(), String> {
-        Err("仅 Windows 支持凭据管理器".into())
+        Err("Credential Manager is only supported on Windows".into())
     }
     pub fn load(_email: &str) -> Result<String, String> {
-        Err("仅 Windows 支持凭据管理器".into())
+        Err("Credential Manager is only supported on Windows".into())
     }
     pub fn delete(_email: &str) {}
 }
@@ -674,17 +674,17 @@ pub(crate) mod net {
         let mut byte = [0u8; 1];
         loop {
             match stream.read(&mut byte) {
-                Ok(0) => return Err("服务器关闭了连接".into()),
+                Ok(0) => return Err("Server closed the connection".into()),
                 Ok(_) => {
                     buf.push(byte[0]);
                     if buf.ends_with(b"\r\n") {
                         return Ok(());
                     }
                     if buf.len() > 8192 {
-                        return Err("服务器响应过长".into());
+                        return Err("Server response too long".into());
                     }
                 }
-                Err(e) => return Err(format!("读取失败：{e}")),
+                Err(e) => return Err(format!("Read failed: {e}")),
             }
         }
     }
@@ -693,14 +693,14 @@ pub(crate) mod net {
         let tls = TlsConnector::builder()
             .min_protocol_version(Some(native_tls::Protocol::Tlsv12))
             .build()
-            .map_err(|e| format!("TLS 初始化失败：{e}"))?;
+            .map_err(|e| format!("TLS initialization failed: {e}"))?;
         let (host,port,username)=account.endpoint()?;
         let tcp = TcpStream::connect((host.as_str(), port))
-            .map_err(|e| format!("无法连接 {host}：{e}"))?;
+            .map_err(|e| format!("Can’t connect to {host}: {e}"))?;
         let timeout = Some(Duration::from_secs(20));
         let _ = tcp.set_read_timeout(timeout);
         let _ = tcp.set_write_timeout(timeout);
-        let mut stream = tls.connect(&host, tcp).map_err(|e| format!("TLS 握手失败：{e}"))?;
+        let mut stream = tls.connect(&host, tcp).map_err(|e| format!("TLS handshake failed: {e}"))?;
 
         // 1) 读问候，直到 "* OK" / "* PREAUTH"
         let mut greeting = Vec::new();
@@ -710,13 +710,13 @@ pub(crate) mod net {
             let upper = String::from_utf8_lossy(&line).to_ascii_uppercase();
             greeting.extend_from_slice(&line);
             if upper.starts_with("* BYE") {
-                return Err("服务器拒绝连接".into());
+                return Err("Server refused the connection".into());
             }
             if upper.starts_with("* OK") || upper.starts_with("* PREAUTH") {
                 break;
             }
             if greeting.len() > 8192 {
-                return Err("服务器问候异常".into());
+                return Err("Unexpected server greeting".into());
             }
         }
 
@@ -724,7 +724,7 @@ pub(crate) mod net {
         if account.provider.needs_id() {
             stream
                 .write_all(b"A0001 ID (\"name\" \"daozai\" \"version\" \"0.5.5\" \"vendor\" \"daozai\")\r\n")
-                .map_err(|e| format!("发送 ID 失败：{e}"))?;
+                .map_err(|e| format!("Failed to send ID: {e}"))?;
             let _ = stream.flush();
             let mut ok = false;
             for _ in 0..20 {
@@ -737,13 +737,13 @@ pub(crate) mod net {
                 }
             }
             if !ok {
-                return Err("服务器不接受 ID 命令".into());
+                return Err("Server rejected the ID command".into());
             }
         }
 
         // 3) 把问候交回 imap，再正常登录
         let mut client = imap::Client::new(Prefixed::new(greeting, stream));
-        client.read_greeting().map_err(|e| format!("服务器问候异常：{e}"))?;
+        client.read_greeting().map_err(|e| format!("Unexpected server greeting: {e}"))?;
         let session = client
             .login(username, password)
             .map_err(|(e, _)| login_error(e))?;
@@ -752,16 +752,16 @@ pub(crate) mod net {
 
     pub fn login_error(e: imap::Error) -> String {
         match e {
-            imap::Error::No(_) | imap::Error::Bad(_) => "登录被拒绝，请检查用户名、授权码和管理员的 IMAP/认证策略（不支持 OAuth-only）".into(),
-            imap::Error::Io(_) => "登录时网络连接中断，请重试".into(),
-            _ => "IMAP 登录失败，请核对服务器及认证方式".into(),
+            imap::Error::No(_) | imap::Error::Bad(_) => "Login rejected. Check the username, authorization code and your admin’s IMAP/authentication policy (OAuth-only is not supported)".into(),
+            imap::Error::Io(_) => "Network connection dropped during login, please retry".into(),
+            _ => "IMAP login failed, please check the server and authentication method".into(),
         }
     }
 
     /// 测试连接：连上、登录、选 INBOX，然后退出。
     pub fn probe(account: &Account, password: &str) -> Result<(), String> {
         let mut session = connect(account, password)?;
-        session.select("INBOX").map_err(|e| format!("无法打开收件箱：{e}"))?;
+        session.select("INBOX").map_err(|e| format!("Can’t open inbox: {e}"))?;
         let _ = session.logout();
         Ok(())
     }
@@ -862,7 +862,7 @@ mod service {
                             let _ = ev.send(Event::Test {
                                 account: account.email,
                                 ok: result.is_ok(),
-                                note: result.err().unwrap_or_else(|| "连接成功".into()),
+                                note: result.err().unwrap_or_else(|| "Connected successfully".into()),
                             });
                         });
                 }
@@ -996,7 +996,7 @@ mod service {
             let Ok(mailbox)=session.select("INBOX") else {
                 let _ = ev.send(Event::Status {
                     account: account.email.clone(),
-                    status: Status::Failed("无法打开收件箱".into()),
+                    status: Status::Failed("Can’t open inbox".into()),
                 });
                 if sleep_stop(&stop, next_retry_delay(30,&mut failures)) {
                     return;
@@ -1022,11 +1022,11 @@ mod service {
         stop:&AtomicBool,interval:&AtomicU64,ev:&Sender<Event>,
     )->Result<(),String> {
         match last_uid {
-            Some(last)=>fetch_new(session,account,last,ev).map_err(|_|"读取新邮件失败，正在重连")?,
-            None=>{*last_uid=Some(recent(session,account,ev).map_err(|_|"读取最近邮件失败，正在重连")?);}
+            Some(last)=>fetch_new(session,account,last,ev).map_err(|_|"Failed to read new mail, reconnecting")?,
+            None=>{*last_uid=Some(recent(session,account,ev).map_err(|_|"Failed to read recent mail, reconnecting")?);}
         }
         let mut allow_noop=true;
-        let mut idle_supported=session.capabilities().map_err(|_|"读取收信能力失败，正在重连")?.has_str("IDLE");
+        let mut idle_supported=session.capabilities().map_err(|_|"Failed to read server capabilities, reconnecting")?.has_str("IDLE");
         let _=ev.send(Event::Status{account:account.email.clone(),status:Status::Ready});
         loop {
             if stop.load(Ordering::Relaxed){let _=session.logout();return Ok(());}
@@ -1037,18 +1037,18 @@ mod service {
                     Ok(())=>{},
                     // 服务器明确拒绝推送时，本次连接改为轮询；重连后重新检查推送能力。
                     Err(imap::Error::No(_)|imap::Error::Bad(_))=>idle_supported=false,
-                    Err(_)=>return Err("邮件推送连接中断，正在重连".into()),
+                    Err(_)=>return Err("Mail push connection dropped, reconnecting".into()),
                 }
             }else{
                 wait_for_poll(session,cycle_started,interval.load(Ordering::Relaxed),&mut allow_noop,|at|sleep_until_stop(stop,at))
-                    .map_err(|_|"邮件连接中断，正在重连")?;
+                    .map_err(|_|"Mail connection dropped, reconnecting")?;
             }
             if stop.load(Ordering::Relaxed){let _=session.logout();return Ok(());}
-            fetch_new(session,account,last_uid.as_mut().unwrap(),ev).map_err(|_|"读取新邮件失败，正在重连")?;
+            fetch_new(session,account,last_uid.as_mut().unwrap(),ev).map_err(|_|"Failed to read new mail, reconnecting")?;
             if idle_supported && *last_uid==previous && cycle_started.elapsed()<Duration::from_secs(5) {
                 if sleep_stop(stop,5){let _=session.logout();return Ok(());}
                 // 冷却后补读新邮件，并消费等待期间到达的通知，再进入下一轮推送等待。
-                fetch_new(session,account,last_uid.as_mut().unwrap(),ev).map_err(|_|"读取新邮件失败，正在重连")?;
+                fetch_new(session,account,last_uid.as_mut().unwrap(),ev).map_err(|_|"Failed to read new mail, reconnecting")?;
             }
         }
     }
@@ -1328,7 +1328,7 @@ mod service {
     }
 
     #[test]
-    #[ignore = "需要真实 QQ 邮箱及新测试邮件，验证后台监听"]
+    #[ignore = "Requires a real QQ mailbox and a new test email to verify background listening"]
     fn qq_live_notification_worker() {
         let accounts=load_accounts().into_iter().filter(|a|a.provider==Provider::Qq&&a.enabled).collect::<Vec<_>>();
         assert!(!accounts.is_empty());
@@ -1348,37 +1348,37 @@ mod service {
                 }
             }
         }
-        service.sync(&[],120);panic!("160 秒内未收到新邮件事件");
+        service.sync(&[],120);panic!("No new-mail event received within 160 s");
     }
 
     #[test]
-    #[ignore="需要本轮已发送的日历邀请和普通日期邮件"]
+    #[ignore="Requires the calendar invite and plain date email sent in this round"]
     fn qq_live_calendar_mail_probe() {
         let account=load_accounts().into_iter().find(|a|a.provider==Provider::Qq&&a.enabled).unwrap();
         let password=secrets::load(&account.credential_key()).unwrap();
         let mut session=net::connect(&account,&password).unwrap();session.examine("INBOX").unwrap();
         let (tx,rx)=std::sync::mpsc::channel();recent(&mut session,&account,&tx).unwrap();
         let items=rx.try_iter().filter_map(|ev|if let Event::Mail{item,..}=ev{Some(item)}else{None}).collect::<Vec<_>>();
-        let invite=items.iter().find(|m|m.subject=="【岛仔测试】邮件日程邀请：收件箱合并验证").expect("测试邀请未到达");
+        let invite=items.iter().find(|m|m.subject=="【岛仔测试】邮件日程邀请：收件箱合并验证").expect("Test invite did not arrive");
         assert_eq!(invite.meeting.as_ref().unwrap().uid,"daozai-mail-test-20261103-1500");
-        let plain=items.iter().find(|m|m.subject=="DAOZAI-DATE-TEST-20261103").expect("普通日期邮件未到达");
+        let plain=items.iter().find(|m|m.subject=="DAOZAI-DATE-TEST-20261103").expect("Plain date email did not arrive");
         assert!(plain.meeting.is_none());session.logout().unwrap();
         println!("invitation_recognized=true plain_date_rejected=true");
     }
 
     /// 显式运行的真实邮箱只读检查；不输出地址、凭据或邮件内容。
     #[test]
-    #[ignore = "需要本机已连接的 QQ 邮箱，显式执行只读实测"]
+    #[ignore = "Requires a QQ mailbox connected on this machine; explicitly runs a read-only live test"]
     fn qq_live_read_only_probe() {
         let accounts=load_accounts();
-        let account=accounts.iter().find(|a|a.provider==Provider::Qq&&a.enabled).expect("未找到已启用 QQ 邮箱");
-        let password=secrets::load(&account.credential_key()).expect("读取邮箱凭据失败");
-        let mut session=net::connect(account,&password).expect("真实登录失败");
-        session.examine("INBOX").expect("只读打开收件箱失败");
-        println!("idle_supported={}",session.capabilities().expect("读取能力失败").has_str("IDLE"));
-        let before=session.uid_search("UNSEEN").expect("读取未读状态失败");
+        let account=accounts.iter().find(|a|a.provider==Provider::Qq&&a.enabled).expect("No enabled QQ mailbox found");
+        let password=secrets::load(&account.credential_key()).expect("Failed to read mailbox credentials");
+        let mut session=net::connect(account,&password).expect("Real login failed");
+        session.examine("INBOX").expect("Failed to open inbox read-only");
+        println!("idle_supported={}",session.capabilities().expect("Failed to read capabilities").has_str("IDLE"));
+        let before=session.uid_search("UNSEEN").expect("Failed to read unread status");
         let (tx,rx)=std::sync::mpsc::channel();
-        let mut last=recent(&mut session,account,&tx).expect("最近邮件读取失败");
+        let mut last=recent(&mut session,account,&tx).expect("Failed to read recent mail");
         let initial=rx.try_iter().collect::<Vec<_>>();
         assert!(initial.iter().all(|e|matches!(e,Event::Mail{new:false,..})));
         println!("login=ok readonly_inbox=ok recent_parsed={}",initial.len());
@@ -1387,11 +1387,11 @@ mod service {
         }}
         let received=initial.iter().any(|e|matches!(e,Event::Mail{item,..} if item.subject=="岛仔收信测试"&&item.code.as_deref()==Some("482731")&&!item.links.is_empty()));
         println!("test_message_with_code_and_link={received}");
-        fetch_new(&mut session,account,&mut last,&tx).expect("增量收取失败");
+        fetch_new(&mut session,account,&mut last,&tx).expect("Incremental fetch failed");
         let added=rx.try_iter().count();
-        let after=session.uid_search("UNSEEN").expect("检查未读状态失败");
+        let after=session.uid_search("UNSEEN").expect("Failed to check unread status");
         println!("incremental_fetch=ok new_messages={} unseen_unchanged={}",added,before==after);
-        session.logout().expect("退出失败");
+        session.logout().expect("Logout failed");
     }
 
     fn fetch_new<S:std::io::Read+std::io::Write>(

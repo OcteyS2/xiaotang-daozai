@@ -8,7 +8,7 @@ fn write_report(directory: &Path, title: &str, details: &str) -> std::io::Result
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_secs();
     std::fs::write(&path, format!(
-        "岛仔 {}\n系统：{} / {}\n时间（Unix 秒）：{timestamp}\n{title}\n{details}\n",
+        "Daozai {}\nSystem: {} / {}\nTime (Unix seconds): {timestamp}\n{title}\n{details}\n",
         env!("CARGO_PKG_VERSION"), std::env::consts::OS, std::env::consts::ARCH,
     ))?;
     Ok(path)
@@ -16,8 +16,8 @@ fn write_report(directory: &Path, title: &str, details: &str) -> std::io::Result
 
 fn message(directory: &Path, title: &str, details: &str) -> String {
     match write_report(directory, title, details) {
-        Ok(path) => format!("{title}\n\n请将以下日志发给开发者，帮助定位问题：\n{}", path.display()),
-        Err(error) => format!("{title}\n\n{details}\n\n日志无法保存：{error}\n请截图反馈。"),
+        Ok(path) => format!("{title}\n\nPlease send the following log to the developer to help locate the problem:\n{}", path.display()),
+        Err(error) => format!("{title}\n\n{details}\n\nCouldn’t save the log: {error}\nPlease send a screenshot instead."),
     }
 }
 
@@ -28,7 +28,7 @@ pub fn report(title: &str, details: &str) {
         use windows::core::{w, PCWSTR};
         use windows::Win32::UI::WindowsAndMessaging::{MessageBoxW, MB_ICONERROR, MB_OK};
         let wide: Vec<u16> = text.encode_utf16().chain(Some(0)).collect();
-        unsafe { MessageBoxW(None, PCWSTR(wide.as_ptr()), w!("岛仔"), MB_OK | MB_ICONERROR); }
+        unsafe { MessageBoxW(None, PCWSTR(wide.as_ptr()), w!("Daozai"), MB_OK | MB_ICONERROR); }
     }
     #[cfg(not(windows))]
     eprintln!("{text}");
@@ -39,17 +39,17 @@ pub fn startup(stage:&str) {
     let directory=daozai::model::config_dir().join("diagnostics");
     if std::fs::create_dir_all(&directory).is_ok() {
         let _=std::fs::write(directory.join("last-startup.log"),format!(
-            "岛仔 {}\n进程：{}\n启动阶段：{stage}\n",env!("CARGO_PKG_VERSION"),std::process::id()));
+            "Daozai {}\nProcess: {}\nStartup stage: {stage}\n",env!("CARGO_PKG_VERSION"),std::process::id()));
     }
 }
 
 /// 记录实际使用的图形设备，避免把电脑里的显卡列表误当作当前渲染设备。
 pub fn graphics(cc:&eframe::CreationContext<'_>) {
     use eframe::glow::HasContext;
-    let details=if let Some(gl)=&cc.gl {unsafe{format!("厂商：{}\n渲染器：{}\nOpenGL：{}\n",
+    let details=if let Some(gl)=&cc.gl {unsafe{format!("Vendor: {}\nRenderer: {}\nOpenGL: {}\n",
         gl.get_parameter_string(eframe::glow::VENDOR),gl.get_parameter_string(eframe::glow::RENDERER),gl.get_parameter_string(eframe::glow::VERSION))}}
     else if let Some(state)=&cc.wgpu_render_state {
-        let info=state.adapter.get_info();format!("渲染器：{}\n图形后端：{:?}\n设备类型：{:?}\n",info.name,info.backend,info.device_type)
+        let info=state.adapter.get_info();format!("Renderer: {}\nGraphics backend: {:?}\nDevice type: {:?}\n",info.name,info.backend,info.device_type)
     }else{return;};
     let directory=daozai::model::config_dir().join("diagnostics");
     if std::fs::create_dir_all(&directory).is_ok(){let _=std::fs::write(directory.join("last-graphics.log"),details);}
@@ -59,9 +59,9 @@ pub fn install() {
     std::panic::set_hook(Box::new(|info| {
         // 不写入 panic 的数据载荷，避免把邮件、凭据或登录信息带进日志。
         let location = info.location().map(|p| format!("{}:{}:{}", p.file(), p.line(), p.column()))
-            .unwrap_or_else(|| "未知".into());
-        report("岛仔发生异常，请重新启动。", &format!(
-            "代码位置：{location}\n调用栈：\n{}", std::backtrace::Backtrace::force_capture(),
+            .unwrap_or_else(|| "Unknown".into());
+        report("Daozai hit an error, please restart it.", &format!(
+            "Code location: {location}\nBacktrace:\n{}", std::backtrace::Backtrace::force_capture(),
         ));
     }));
 }

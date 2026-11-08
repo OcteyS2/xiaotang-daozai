@@ -6,8 +6,8 @@ use std::{fs,io::Read,path::PathBuf,sync::mpsc,time::Duration};
 
 const ENDPOINT:&str="https://gemini.google.com/_/BardChatUi/graphql/schemas/GEMINI_WEB_GRAPHQL/executeQuery";
 const SIGNATURE:&str="2/dWbCvkVB0X16r9NPnxifeOAAqdCqMf0xeWvau9yPy7g=";
-const LOGIN_ERROR:&str="Gemini 登录已失效，请重新连接浏览器账号";
-const PARSE_ERROR:&str="Gemini 额度接口已变化，暂时无法读取";
+const LOGIN_ERROR:&str="Gemini sign-in expired, please reconnect your browser account";
+const PARSE_ERROR:&str="Gemini quota API changed, can't read it for now";
 const EMAIL_SCRIPT:&str=r#"JSON.stringify({email:(document.querySelector('a[aria-label*="@"]')?.getAttribute('aria-label')||'').match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]||''})"#;
 
 pub fn parse(value:&Value)->Result<Snapshot,String>{
@@ -15,12 +15,12 @@ pub fn parse(value:&Value)->Result<Snapshot,String>{
     if data["viewer"].is_null(){return Err(LOGIN_ERROR.into());}
     let usage=data.pointer("/viewer/rpcs/getUsageInfo").ok_or(PARSE_ERROR)?;
     let pools=usage["pools"].as_array().ok_or(PARSE_ERROR)?;
-    let windows=[("GXU_FIVE_HOURLY",18000,"5 小时"),("GXU_WEEKLY",604800,"本周")].into_iter().filter_map(|(kind,seconds,label)|{
+    let windows=[("GXU_FIVE_HOURLY",18000,"5h"),("GXU_WEEKLY",604800,"Weekly")].into_iter().filter_map(|(kind,seconds,label)|{
         let pool=pools.iter().find(|p|p["poolType"]==kind)?;
         let used=pool["percentageUsed"].as_f64().filter(|n|n.is_finite() && *n>=0.0)?;
         Some(Window{label:label.into(),seconds:Some(seconds),remaining:(100.0-used*100.0).clamp(0.0,100.0) as f32,reset:super::reset(&pool["gxu"]["windowRefreshesAt"])})
     }).collect::<Vec<_>>();
-    if windows.is_empty(){return Err("此 Google 账号暂未提供 Gemini 订阅额度".into());}
+    if windows.is_empty(){return Err("This Google account has no Gemini subscription quota yet".into());}
     Ok(Snapshot{credits:None,wallet:None,plan:if usage["subscriptionTier"]=="TIER1"{"AI Pro"}else{""}.into(),windows,extra:vec![],at:chrono::Utc::now().timestamp()})
 }
 fn decode(raw:&str)->Result<Snapshot,String>{
@@ -30,14 +30,14 @@ fn decode(raw:&str)->Result<Snapshot,String>{
 }
 fn email(raw:&str)->Result<String,String>{
     let value=raw.trim().to_ascii_lowercase();
-    if value.len()>254 || !value.is_ascii() || value.chars().any(char::is_whitespace) || value.split('@').count()!=2 || !value.split('@').all(|s|!s.is_empty()) {return Err("请填写这个 Google 账号的完整邮箱".into());}
+    if value.len()>254 || !value.is_ascii() || value.chars().any(char::is_whitespace) || value.split('@').count()!=2 || !value.split('@').all(|s|!s.is_empty()) {return Err("Please enter this Google account's full email address".into());}
     Ok(value)
 }
 fn slot(email:&str)->String{ring::digest::digest(&ring::digest::SHA256,email.as_bytes()).as_ref().iter().map(|b|format!("{b:02x}")).collect()}
 fn cookie(raw:&str)->Result<String,String>{
     let raw=raw.trim();let raw=raw.strip_prefix("Cookie:").or_else(||raw.strip_prefix("cookie:")).unwrap_or(raw).trim();
-    if raw.is_empty() || raw.len()>32768 || !raw.is_ascii() || raw.bytes().any(|b|b<32 || b==127){return Err("请粘贴有效的 Cookie 请求头".into());}
-    if !raw.split(';').any(|part|part.trim().split_once('=').is_some_and(|(name,value)|matches!(name,"SID"|"__Secure-1PSID"|"__Secure-3PSID") && !value.is_empty())){return Err("Cookie 中没有 Google 登录会话，请重新复制".into());}
+    if raw.is_empty() || raw.len()>32768 || !raw.is_ascii() || raw.bytes().any(|b|b<32 || b==127){return Err("Please paste a valid Cookie request header".into());}
+    if !raw.split(';').any(|part|part.trim().split_once('=').is_some_and(|(name,value)|matches!(name,"SID"|"__Secure-1PSID"|"__Secure-3PSID") && !value.is_empty())){return Err("Cookie has no Google sign-in session, please copy it again".into());}
     Ok(raw.into())
 }
 struct Session {email:String,cookie:String}
@@ -56,14 +56,14 @@ fn request(agent:&ureq::Agent,url:&str,session:&Session)->Result<Snapshot,(Strin
     for _ in 0..3{
     let response=agent.get(&current).set("Cookie",&session.cookie).set("Accept","application/json").set("Referer","https://gemini.google.com/usage").set("User-Agent","Mozilla/5.0 Daozai").call().map_err(|e|match e{
         ureq::Error::Status(401|403,_)=>(LOGIN_ERROR.into(),0),
-        ureq::Error::Status(429,r)=>("Gemini 请求过于频繁，稍后自动重试".into(),r.header("Retry-After").and_then(|s|s.parse().ok()).unwrap_or(180).clamp(30,3600)),
-        ureq::Error::Status(n,_)=>(format!("Gemini 额度服务暂不可用（{n}）"),60),
-        _=>("无法连接 Gemini，请检查网络或代理".into(),30)
+        ureq::Error::Status(429,r)=>("Too many Gemini requests, will retry automatically later".into(),r.header("Retry-After").and_then(|s|s.parse().ok()).unwrap_or(180).clamp(30,3600)),
+        ureq::Error::Status(n,_)=>(format!("Gemini quota service unavailable ({n})"),60),
+        _=>("Can't connect to Gemini. Check your network or proxy".into(),30)
     })?;
     if (300..400).contains(&response.status()){
         current=response.header("Location").and_then(|to|redirect_target(&current,to)).ok_or_else(||(LOGIN_ERROR.into(),0))?;continue;
     }
-    let mut body=String::new();response.into_reader().take(1024*1024).read_to_string(&mut body).map_err(|_|("读取 Gemini 额度失败".into(),30))?;
+    let mut body=String::new();response.into_reader().take(1024*1024).read_to_string(&mut body).map_err(|_|("Failed to read Gemini quota".into(),30))?;
     return decode(&body).map_err(|e|(e,60));
     }
     Err((LOGIN_ERROR.into(),0))
@@ -77,24 +77,24 @@ pub(super) fn protect(raw:&[u8],encrypt:bool)->Result<Vec<u8>,String>{
     use windows::Win32::{Foundation::{HLOCAL,LocalFree},Security::Cryptography::{CryptProtectData,CryptUnprotectData,CRYPT_INTEGER_BLOB,CRYPTPROTECT_UI_FORBIDDEN}};
     let input=CRYPT_INTEGER_BLOB{cbData:raw.len().try_into().map_err(|_|LOGIN_ERROR)?,pbData:raw.as_ptr().cast_mut()};let mut output=CRYPT_INTEGER_BLOB::default();
     unsafe{
-        if encrypt{CryptProtectData(&input,None,None,None,None,CRYPTPROTECT_UI_FORBIDDEN,&mut output)}else{CryptUnprotectData(&input,None,None,None,None,CRYPTPROTECT_UI_FORBIDDEN,&mut output)}.map_err(|_|"无法访问 Windows 安全保存的登录会话")?;
+        if encrypt{CryptProtectData(&input,None,None,None,None,CRYPTPROTECT_UI_FORBIDDEN,&mut output)}else{CryptUnprotectData(&input,None,None,None,None,CRYPTPROTECT_UI_FORBIDDEN,&mut output)}.map_err(|_|"Can't access the sign-in session saved securely by Windows")?;
         let bytes=std::slice::from_raw_parts(output.pbData,output.cbData as usize).to_vec();let _=LocalFree(HLOCAL(output.pbData.cast()));Ok(bytes)
     }
 }
 #[cfg(not(windows))]
-pub(super) fn protect(_raw:&[u8],_encrypt:bool)->Result<Vec<u8>,String>{Err("当前系统暂不支持安全保存登录会话".into())}
+pub(super) fn protect(_raw:&[u8],_encrypt:bool)->Result<Vec<u8>,String>{Err("Secure session storage isn't supported on this system yet".into())}
 fn save(session:&Session)->Result<String,String>{
     let slot=slot(&session.email);let path=session_path(&slot)?;
     let raw=json!({"email":session.email,"cookie":session.cookie}).to_string();let encrypted=protect(raw.as_bytes(),true)?;
-    fs::create_dir_all(path.parent().unwrap()).map_err(|_|"无法保存 Gemini 登录")?;
-    crate::model::atomic_write(&path,&encrypted).map_err(|_|"无法保存 Gemini 登录")?;Ok(slot)
+    fs::create_dir_all(path.parent().unwrap()).map_err(|_|"Can't save Gemini sign-in")?;
+    crate::model::atomic_write(&path,&encrypted).map_err(|_|"Can't save Gemini sign-in")?;Ok(slot)
 }
 fn load(account:&Account)->Result<Session,String>{
     let expected=account.slot.as_deref().ok_or(LOGIN_ERROR)?;let path=session_path(expected)?;
     let raw=fs::read(path).map_err(|_|LOGIN_ERROR)?;let raw=protect(&raw,false)?;
     let value:Value=serde_json::from_slice(&raw).map_err(|_|LOGIN_ERROR)?;
     let email=email(value["email"].as_str().ok_or(LOGIN_ERROR)?)?;
-    if slot(&email)!=expected{return Err("Gemini 账号不一致，请重新连接".into());}
+    if slot(&email)!=expected{return Err("Gemini account mismatch, please reconnect".into());}
     Ok(Session{email,cookie:cookie(value["cookie"].as_str().ok_or(LOGIN_ERROR)?)?})
 }
 pub fn forget(account:&Account){if let Some(path)=account.slot.as_deref().and_then(|s|session_path(s).ok()){let _=fs::remove_file(path);}}
@@ -107,7 +107,7 @@ impl Connect {
     pub fn start(alias:String,address:String,header:Option<String>,expected:Option<String>)->Self{
         let(tx,rx)=mpsc::channel();std::thread::spawn(move||{let result=(||{
             let session=if let Some(header)=header{Session{email:email(&address)?,cookie:cookie(&header)?}}else{browser_session(&address)?};
-            if expected.as_deref().is_some_and(|s|s!=slot(&session.email)){return Err("当前浏览器是另一个 Google 账号，请切回原账号后重新连接".into());}
+            if expected.as_deref().is_some_and(|s|s!=slot(&session.email)){return Err("The browser is on a different Google account. Switch back to the original account and reconnect".into());}
             let snapshot=request(&super::http_agent(),&request_url(&session.email),&session).map_err(|e|e.0)?;
             let slot=save(&session)?;let label=if alias.trim().is_empty(){format!("Gemini · {}",session.email)}else{alias.trim().into()};
             Ok(Connected{slot,label,snapshot})
@@ -117,32 +117,32 @@ impl Connect {
 }
 fn bridge(agent:&ureq::Agent,action:&str,args:Value)->Result<Value,String>{
     let body=json!({"action":action,"args":args,"session":"daozai-gemini"});
-    let response=agent.post("http://127.0.0.1:10086/command").set("Content-Type","application/json").send_string(&body.to_string()).map_err(|_|"未连接 Kimi 浏览器扩展；可先连接扩展，或使用下方 Cookie 连接")?;
-    let mut raw=String::new();response.into_reader().take(2*1024*1024).read_to_string(&mut raw).map_err(|_|"无法读取浏览器会话")?;
-    let value:Value=serde_json::from_str(&raw).map_err(|_|"浏览器扩展返回无效数据")?;
-    if value["ok"]!=true{return Err("无法读取 Gemini 标签页，请检查浏览器扩展连接".into());}
-    value.get("data").cloned().ok_or_else(||"无法读取浏览器会话".into())
+    let response=agent.post("http://127.0.0.1:10086/command").set("Content-Type","application/json").send_string(&body.to_string()).map_err(|_|"Kimi browser extension not connected; connect the extension, or use the Cookie connection below")?;
+    let mut raw=String::new();response.into_reader().take(2*1024*1024).read_to_string(&mut raw).map_err(|_|"Can't read browser session")?;
+    let value:Value=serde_json::from_str(&raw).map_err(|_|"Browser extension returned invalid data")?;
+    if value["ok"]!=true{return Err("Can't read the Gemini tab. Check the browser extension connection".into());}
+    value.get("data").cloned().ok_or_else(||"Can't read browser session".into())
 }
 fn browser_session(address:&str)->Result<Session,String>{
     let agent=ureq::AgentBuilder::new().timeout(Duration::from_secs(12)).redirects(0).build();
     let response=bridge(&agent,"list_browser_tabs",json!({}))?;
-    let mut tabs=response["tabs"].as_array().ok_or("无法读取浏览器标签页")?.iter().filter(|t|t["url"].as_str().and_then(|s|url::Url::parse(s).ok()).is_some_and(|u|u.scheme()=="https" && u.host_str()==Some("gemini.google.com"))).collect::<Vec<_>>();
-    if tabs.is_empty(){return Err("请先在浏览器打开 gemini.google.com/usage 并登录，再连接当前浏览器".into());}
+    let mut tabs=response["tabs"].as_array().ok_or("Can't read browser tabs")?.iter().filter(|t|t["url"].as_str().and_then(|s|url::Url::parse(s).ok()).is_some_and(|u|u.scheme()=="https" && u.host_str()==Some("gemini.google.com"))).collect::<Vec<_>>();
+    if tabs.is_empty(){return Err("Open gemini.google.com/usage in your browser and sign in first, then connect this browser".into());}
     tabs.sort_by_key(|t|!t["active"].as_bool().unwrap_or(false));
     let target=if address.trim().is_empty(){None}else{Some(email(address)?)};
-    if tabs.len()>1 && target.is_none() && tabs[0]["active"]!=true{return Err("有多个 Gemini 标签页，请激活要连接的标签页，或填写 Google 邮箱".into());}
+    if tabs.len()>1 && target.is_none() && tabs[0]["active"]!=true{return Err("Multiple Gemini tabs open. Activate the tab to connect, or enter the Google email".into());}
     for tab in tabs{
         bridge(&agent,"attach_tab",json!({"tabId":tab["tabId"]}))?;
         let result=bridge(&agent,"evaluate",json!({"code":EMAIL_SCRIPT}))?;
-        let identity:Value=serde_json::from_str(result["value"].as_str().unwrap_or_default()).map_err(|_|"无法识别 Gemini 账号，请打开用量页面后重试")?;
-        let current=email(identity["email"].as_str().unwrap_or_default()).map_err(|_|"请在 Gemini 用量页面登录 Google 账号后重试")?;
+        let identity:Value=serde_json::from_str(result["value"].as_str().unwrap_or_default()).map_err(|_|"Can't identify the Gemini account. Open the usage page and retry")?;
+        let current=email(identity["email"].as_str().unwrap_or_default()).map_err(|_|"Sign in to a Google account on the Gemini usage page and retry")?;
         if target.as_ref().is_some_and(|target|*target!=current){continue;}
         let result=bridge(&agent,"cdp",json!({"method":"Network.getCookies","params":{"urls":["https://gemini.google.com/"]}}))?;
-        let cookies=result["cookies"].as_array().ok_or("无法读取 Gemini 登录会话")?;
+        let cookies=result["cookies"].as_array().ok_or("Can't read Gemini sign-in session")?;
         let header=cookies.iter().filter(|c|matches!(c["domain"].as_str(),Some(".google.com"|"google.com"|".gemini.google.com"|"gemini.google.com"))).filter_map(|c|Some(format!("{}={}",c["name"].as_str()?,c["value"].as_str()?))).collect::<Vec<_>>().join("; ");
         return Ok(Session{email:current,cookie:cookie(&header)?});
     }
-    Err("没有找到这个 Google 账号的 Gemini 标签页，请先打开该账号的用量页面".into())
+    Err("No Gemini tab found for this Google account. Open that account's usage page first".into())
 }
 
 #[cfg(test)]

@@ -1,7 +1,6 @@
 name: Windows 检查
 on:
-  push:
-  pull_request:
+  workflow_dispatch:
 permissions:
   contents: read
 jobs:

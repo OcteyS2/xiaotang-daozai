@@ -22,7 +22,7 @@ fn parts(body:&BodyStructure<'_>,path:&mut Vec<u32>,out:&mut Vec<Vec<u32>>){
 fn make_item(parsed:Parsed,fetch:&imap::types::Fetch,account:&Account)->Item{
     Item {received_unix: fetch.internal_date().map(|d|d.timestamp()), account:account.email.clone(),
         from:if parsed.from.is_empty(){account.email.clone()}else{parsed.from.clone()},
-        subject:if parsed.subject.is_empty(){"（无主题）".into()}else{parsed.subject.clone()},
+        subject:if parsed.subject.is_empty(){"(No subject)".into()}else{parsed.subject.clone()},
         time:fetch.internal_date().map(|d|d.with_timezone(&chrono::Local).format("%m-%d %H:%M").to_string()).unwrap_or_default(),
         code:code_of(&parsed),summary:body_of(&parsed).into(),links:links_of(&parsed),meeting:meeting_of(&parsed.calendar),uid:fetch.uid.unwrap_or(0)}
 }

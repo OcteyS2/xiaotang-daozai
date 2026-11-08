@@ -27,27 +27,27 @@ impl Balance {
 pub struct Wallet {pub available:bool,pub balances:Vec<Balance>}
 impl Wallet {pub fn primary(&self)->&Balance{self.balances.iter().find(|b|b.currency=="CNY").unwrap_or(&self.balances[0])}}
 pub fn parse(v:&Value)->Result<Snapshot,String>{
-    let available=v["is_available"].as_bool().ok_or("余额响应缺少账户状态")?;
-    let rows=v["balance_infos"].as_array().filter(|rows|!rows.is_empty()).ok_or("服务未返回余额")?;
+    let available=v["is_available"].as_bool().ok_or("Balance response missing account status")?;
+    let rows=v["balance_infos"].as_array().filter(|rows|!rows.is_empty()).ok_or("Service returned no balance")?;
     let mut balances=Vec::new();
     for row in rows{
-        let currency=row["currency"].as_str().filter(|c|matches!(*c,"CNY"|"USD")).ok_or("暂不支持该余额币种")?;
-        let amount=|key:&str|row[key].as_str().and_then(|s|s.parse::<f64>().ok()).filter(|n|n.is_finite()).ok_or_else(||"余额字段无效，请稍后刷新".to_string());
-        if balances.iter().any(|b:&Balance|b.currency==currency){return Err("余额币种重复".into());}
+        let currency=row["currency"].as_str().filter(|c|matches!(*c,"CNY"|"USD")).ok_or("Balance currency not supported yet")?;
+        let amount=|key:&str|row[key].as_str().and_then(|s|s.parse::<f64>().ok()).filter(|n|n.is_finite()).ok_or_else(||"Invalid balance field; refresh later".to_string());
+        if balances.iter().any(|b:&Balance|b.currency==currency){return Err("Duplicate balance currency".into());}
         balances.push(Balance{currency:currency.into(),total:amount("total_balance")?,granted:amount("granted_balance")?,topped_up:amount("topped_up_balance")?});
     }
     Ok(Snapshot{wallet:Some(Wallet{available,balances}),at:chrono::Utc::now().timestamp(),..Default::default()})
 }
 #[cfg(windows)]
-fn credential(slot:&str)->Result<keyring::Entry,String>{keyring::Entry::new("Daozai.DeepSeek",slot).map_err(|_|"无法打开 Windows 凭据管理器".into())}
+fn credential(slot:&str)->Result<keyring::Entry,String>{keyring::Entry::new("Daozai.DeepSeek",slot).map_err(|_|"Can’t open Windows Credential Manager".into())}
 #[cfg(windows)]
-fn save(slot:&str,key:&str)->Result<(),String>{credential(slot)?.set_password(key).map_err(|_|"无法安全保存 API Key".into())}
+fn save(slot:&str,key:&str)->Result<(),String>{credential(slot)?.set_password(key).map_err(|_|"Can’t save API Key securely".into())}
 #[cfg(not(windows))]
-fn save(_slot:&str,_key:&str)->Result<(),String>{Err("当前系统不支持安全保存 API Key".into())}
+fn save(_slot:&str,_key:&str)->Result<(),String>{Err("This system can’t save API Keys securely".into())}
 #[cfg(windows)]
-fn load(slot:&str)->Result<String,String>{credential(slot)?.get_password().map_err(|error|match error {keyring::Error::NoEntry=>"未找到已保存的 DeepSeek API Key，请重新连接".into(),_=>"暂时无法读取 Windows 凭据，请稍后重试".into()})}
+fn load(slot:&str)->Result<String,String>{credential(slot)?.get_password().map_err(|error|match error {keyring::Error::NoEntry=>"No saved DeepSeek API Key found; please reconnect".into(),_=>"Can’t read Windows credentials right now; try again later".into()})}
 #[cfg(not(windows))]
-fn load(_slot:&str)->Result<String,String>{Err("当前系统不支持读取 API Key".into())}
+fn load(_slot:&str)->Result<String,String>{Err("This system can’t read API Keys".into())}
 pub fn forget(account:&Account){
     #[cfg(windows)]
     if let Some(slot)=&account.slot{if let Ok(entry)=credential(slot){let _=entry.delete_credential();}}
@@ -55,22 +55,22 @@ pub fn forget(account:&Account){
 }
 fn response_error(status:u16)->(String,u64){
     match status{
-        401=>("本次认证失败（401），请先重试".into(),0),
-        403=>("查询被拒绝（403），请检查网络或权限".into(),60),
-        429=>("请求过于频繁，稍后自动重试".into(),180),
-        _=>(format!("余额服务暂不可用（{status}），请稍后重试"),30)
+        401=>("Authentication failed (401); please retry".into(),0),
+        403=>("Query refused (403); check network or permissions".into(),60),
+        429=>("Too many requests; will retry automatically".into(),180),
+        _=>(format!("Balance service unavailable ({status}); try again later"),30)
     }
 }
 fn request(agent:&ureq::Agent,key:&str)->Result<Snapshot,(String,u64)>{
     let response=agent.get("https://api.deepseek.com/user/balance").set("Authorization",&format!("Bearer {key}")).set("Accept","application/json").call().map_err(|e|match e{
         ureq::Error::Status(status,_)=>response_error(status),
-        _=>("无法更新 DeepSeek 余额，请检查网络后重试".into(),30)
+        _=>("Can’t update DeepSeek balance; check network and retry".into(),30)
     })?;
-    let mut body=String::new();response.into_reader().take(1024*1024).read_to_string(&mut body).map_err(|_|("读取余额失败".into(),30))?;
-    let v=serde_json::from_str(&body).map_err(|_|("余额响应无效".into(),30))?;parse(&v).map_err(|e|(e,30))
+    let mut body=String::new();response.into_reader().take(1024*1024).read_to_string(&mut body).map_err(|_|("Failed to read balance".into(),30))?;
+    let v=serde_json::from_str(&body).map_err(|_|("Invalid balance response".into(),30))?;parse(&v).map_err(|e|(e,30))
 }
 pub fn fetch(agent:&ureq::Agent,account:&Account)->Result<Snapshot,(String,u64)>{
-    let slot=account.slot.as_deref().ok_or(("请连接 DeepSeek API Key".into(),0))?;
+    let slot=account.slot.as_deref().ok_or(("Please connect a DeepSeek API Key".into(),0))?;
     request(agent,&load(slot).map_err(|e|(e,0))?)
 }
 pub struct Connected {pub slot:String,pub label:String,pub snapshot:Snapshot}
@@ -78,7 +78,7 @@ pub struct Connect {rx:mpsc::Receiver<Result<Connected,String>>}
 impl Connect {
     pub fn start(alias:String,key:String)->Self{
         let(tx,rx)=mpsc::channel();std::thread::spawn(move||{let result=(||{
-            let key=key.trim();if key.is_empty()||key.chars().any(char::is_whitespace){return Err("请输入有效的 API Key".into());}
+            let key=key.trim();if key.is_empty()||key.chars().any(char::is_whitespace){return Err("Please enter a valid API Key".into());}
             let snapshot=request(&super::http_agent(),key).map_err(|e|e.0)?;
             let digest=ring::digest::digest(&ring::digest::SHA256,key.as_bytes());let slot=digest.as_ref().iter().map(|b|format!("{b:02x}")).collect::<String>();
             save(&slot,key)?;Ok(Connected{slot,label:if alias.trim().is_empty(){"DeepSeek".into()}else{alias.trim().into()},snapshot})

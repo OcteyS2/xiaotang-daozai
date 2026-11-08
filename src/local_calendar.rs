@@ -28,16 +28,16 @@ impl Draft {
             error:String::new(),focused:false,confirm_delete:false}
     }
     pub fn entry(&self)->Result<Entry,String> {
-        if self.title.trim().is_empty(){return Err("请填写日程名称".into());}
-        let date=|text:&str|NaiveDate::parse_from_str(text.trim(),"%Y-%m-%d").map_err(|_|"日期格式：2026-11-03".to_string());
-        let time=|text:&str|NaiveTime::parse_from_str(text.trim(),"%H:%M").map_err(|_|"时间格式：18:30".to_string());
+        if self.title.trim().is_empty(){return Err("Please enter an event name".into());}
+        let date=|text:&str|NaiveDate::parse_from_str(text.trim(),"%Y-%m-%d").map_err(|_|"Date format: 2026-11-03".to_string());
+        let time=|text:&str|NaiveTime::parse_from_str(text.trim(),"%H:%M").map_err(|_|"Time format: 18:30".to_string());
         let start_day=date(&self.start_date)?;let end_day=date(&self.end_date)?;
         let (start,end)=if self.all_day {
-            (start_day.and_hms_opt(0,0,0).unwrap(),end_day.succ_opt().ok_or("结束日期无效")?.and_hms_opt(0,0,0).unwrap())
+            (start_day.and_hms_opt(0,0,0).unwrap(),end_day.succ_opt().ok_or("Invalid end date")?.and_hms_opt(0,0,0).unwrap())
         }else{(start_day.and_time(time(&self.start_time)?),end_day.and_time(time(&self.end_time)?))};
-        let timestamp=|dt:chrono::NaiveDateTime|dt.and_local_timezone(Local).single().map(|dt|dt.timestamp()).ok_or("此时间不存在或有歧义，请调整时间".to_string());
+        let timestamp=|dt:chrono::NaiveDateTime|dt.and_local_timezone(Local).single().map(|dt|dt.timestamp()).ok_or("This time doesn’t exist or is ambiguous, please adjust it".to_string());
         let (start,end)=(timestamp(start)?,timestamp(end)?);
-        if end<=start{return Err("结束时间必须晚于开始时间".into());}
+        if end<=start{return Err("End time must be after start time".into());}
         let uid=self.uid.clone().unwrap_or_else(||format!("local-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         Ok(Entry{event:Meeting{uid,title:self.title.trim().into(),start,end:Some(end),all_day:self.all_day,
             at:chrono::DateTime::from_timestamp(start,0).unwrap().with_timezone(&Local).format("%m-%d %H:%M").to_string()},reminder:self.reminder})
@@ -54,28 +54,28 @@ impl Entry {
 }
 
 pub(crate) fn decode(raw:&[u8])->Result<Vec<Entry>,String> {
-    let rows:Vec<serde_json::Value>=serde_json::from_slice(raw).map_err(|_|"本机日程文件无法读取".to_string())?;
+    let rows:Vec<serde_json::Value>=serde_json::from_slice(raw).map_err(|_|"Can’t read local schedule file".to_string())?;
     rows.into_iter().map(|row|{
-        let text=|key:&str|row.get(key).and_then(|v|v.as_str()).map(str::to_owned).ok_or("本机日程字段缺失".to_string());
-        let start=row["start"].as_i64().ok_or("本机日程时间无效")?;
-        let end=row["end"].as_i64().ok_or("本机日程时间无效")?;
-        let dt=chrono::DateTime::from_timestamp(start,0).ok_or("本机日程时间无效")?;
-        if end<=start || chrono::DateTime::from_timestamp(end,0).is_none(){return Err("本机日程结束时间无效".into());}
+        let text=|key:&str|row.get(key).and_then(|v|v.as_str()).map(str::to_owned).ok_or("Local schedule field missing".to_string());
+        let start=row["start"].as_i64().ok_or("Invalid local event time")?;
+        let end=row["end"].as_i64().ok_or("Invalid local event time")?;
+        let dt=chrono::DateTime::from_timestamp(start,0).ok_or("Invalid local event time")?;
+        if end<=start || chrono::DateTime::from_timestamp(end,0).is_none(){return Err("Invalid local event end time".into());}
         Ok(Entry{event:Meeting{uid:text("uid")?,title:text("title")?,start,end:Some(end),all_day:row["all_day"].as_bool().unwrap_or(false),
             at:dt.with_timezone(&Local).format("%m-%d %H:%M").to_string()},reminder:row["reminder"].as_u64().and_then(|n|u32::try_from(n).ok())})
     }).collect()
 }
 pub(crate) fn load()->Result<Vec<Entry>,String> {
     match std::fs::read(crate::model::config_dir().join("local-calendar.json")) {
-        Ok(raw)=>decode(&raw),Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(vec![]),Err(_)=>Err("无法读取本机日程文件".into()),
+        Ok(raw)=>decode(&raw),Err(e) if e.kind()==std::io::ErrorKind::NotFound=>Ok(vec![]),Err(_)=>Err("Can’t read local schedule file".into()),
     }
 }
 pub(crate) fn save(entries:&[Entry])->Result<(),String> {
     let rows:Vec<_>=entries.iter().map(|entry|serde_json::json!({"uid":entry.event.uid,"title":entry.event.title,"start":entry.event.start,
         "end":entry.event.end,"all_day":entry.event.all_day,"reminder":entry.reminder})).collect();
     let path=crate::model::config_dir().join("local-calendar.json");
-    std::fs::create_dir_all(path.parent().unwrap()).map_err(|_|"无法创建日程目录")?;
-    crate::model::atomic_write(&path,&serde_json::to_vec(&rows).map_err(|_|"日程序列化失败")?).map_err(|_|"日程保存失败，请检查磁盘和文件权限".into())
+    std::fs::create_dir_all(path.parent().unwrap()).map_err(|_|"Can’t create schedule folder")?;
+    crate::model::atomic_write(&path,&serde_json::to_vec(&rows).map_err(|_|"Failed to serialize schedule")?).map_err(|_|"Failed to save schedule, check disk space and file permissions".into())
 }
 
 #[cfg(test)]

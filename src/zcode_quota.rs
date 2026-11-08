@@ -8,12 +8,12 @@ pub(crate) fn path()->Option<PathBuf>{
     Some(PathBuf::from(std::env::var_os("USERPROFILE")?).join(".zcode/v2/credentials.json"))
 }
 fn value(root:&Value,name:&str)->Result<String,String>{
-    let raw=root[name].as_str().ok_or("请先在 ZCode 中登录个人账号")?;
+    let raw=root[name].as_str().ok_or("Please sign in to a personal account in ZCode first")?;
     let Some(encoded)=raw.strip_prefix("enc:v1:") else{return Ok(raw.into());};
     let secret=std::env::var("ZCODE_CREDENTIAL_SECRET").ok().filter(|s|!s.trim().is_empty()).unwrap_or_else(||format!(
         "zcode-credential-fallback:win32:{}:{}",std::env::var("USERPROFILE").unwrap_or_default(),std::env::var("USERNAME").unwrap_or_default()));
     let key=digest::digest(&digest::SHA256,secret.trim().as_bytes());
-    let error="无法读取当前 Windows 用户的 ZCode 登录，请在客户端重新登录";
+    let error="Can’t read the ZCode sign-in for the current Windows user. Please sign in again in the app";
     let parts=encoded.split('.').map(|s|URL_SAFE_NO_PAD.decode(s)).collect::<Result<Vec<_>,_>>().map_err(|_|error)?;
     let [iv,tag,cipher]=parts.as_slice() else{return Err(error.into());};
     if tag.len()!=16{return Err(error.into());}
@@ -25,10 +25,10 @@ fn value(root:&Value,name:&str)->Result<String,String>{
 struct Login { family:String, slot:String, subject:String, jwt:String }
 fn login(root:&Value)->Result<Login,String>{
     let family=value(root,"oauth:active_provider")?;
-    if !matches!(family.as_str(),"zai"|"bigmodel"){return Err("暂不支持这个 ZCode 登录区域".into());}
+    if !matches!(family.as_str(),"zai"|"bigmodel"){return Err("This ZCode sign-in region isn’t supported yet".into());}
     let jwt=value(root,"zcodejwttoken")?;
-    let payload=jwt.split('.').nth(1).and_then(|s|URL_SAFE_NO_PAD.decode(s).ok()).and_then(|s|serde_json::from_slice::<Value>(&s).ok()).ok_or("ZCode 账号标识无效")?;
-    let id=payload["sub"].as_str().or_else(||payload["user_id"].as_str()).ok_or("ZCode 未返回账号标识")?;
+    let payload=jwt.split('.').nth(1).and_then(|s|URL_SAFE_NO_PAD.decode(s).ok()).and_then(|s|serde_json::from_slice::<Value>(&s).ok()).ok_or("Invalid ZCode account ID")?;
+    let id=payload["sub"].as_str().or_else(||payload["user_id"].as_str()).ok_or("ZCode returned no account ID")?;
     let slot=digest::digest(&digest::SHA256,format!("{family}/{id}").as_bytes()).as_ref().iter().map(|b|format!("{b:02x}")).collect();
     Ok(Login{family,slot,subject:id.to_owned(),jwt})
 }
@@ -41,11 +41,11 @@ fn read(agent:&ureq::Agent,url:&str,auth:&str,device_mid:Option<&str>)->Result<V
     let mut request=agent.get(url).set("Authorization",auth).set("Accept","application/json");
     if let Some(mid)=device_mid{request=request.set("X-Device-Mid",mid);}
     let response=request.call().map_err(|e|match e{
-        ureq::Error::Status(401|403,_)=>"ZCode 授权被拒绝，请在客户端确认登录".into(),
-        ureq::Error::Status(code,_)=>format!("ZCode 用量服务返回 {code}"),
-        _=>"无法连接 ZCode 用量服务".into(),
+        ureq::Error::Status(401|403,_)=>"ZCode authorization denied. Please confirm sign-in in the app".into(),
+        ureq::Error::Status(code,_)=>format!("ZCode usage service returned {code}"),
+        _=>"Can’t connect to the ZCode usage service".into(),
     })?;
-    serde_json::from_reader(response.into_reader().take(1024*1024)).map_err(|_|"ZCode 用量响应无效".into())
+    serde_json::from_reader(response.into_reader().take(1024*1024)).map_err(|_|"Invalid ZCode usage response".into())
 }
 fn success(v:&Value)->bool{ matches!(v["code"].as_i64(),Some(0|200)) || (v["code"].is_null()&&v["success"]==true) }
 fn coding(v:&Value)->Result<Snapshot,String>{
@@ -61,12 +61,12 @@ fn coding(v:&Value)->Result<Snapshot,String>{
         match kind{"TOKENS_LIMIT"|"CREDIT_LIMIT"=>snapshot.windows.push(window),"TIME_LIMIT"=>snapshot.extra.push(window),_=>{}}
     }
     if snapshot.windows.is_empty(){std::mem::swap(&mut snapshot.windows,&mut snapshot.extra);}
-    if snapshot.windows.is_empty(){return Err("ZCode 未提供可显示的套餐比例".into());}
+    if snapshot.windows.is_empty(){return Err("ZCode provided no plan ratio to display".into());}
     Ok(snapshot)
 }
 fn start(v:&Value)->Result<Snapshot,String>{
     let mut snapshot=Snapshot{plan:"Start Plan".into(),at:chrono::Utc::now().timestamp(),..Default::default()};
-    let buckets=v["data"]["balances"].as_array().ok_or("ZCode 响应缺少体验额度明细")?;
+    let buckets=v["data"]["balances"].as_array().ok_or("ZCode response is missing trial quota details")?;
     if buckets.is_empty(){snapshot.plan="暂无体验额度".into();return Ok(snapshot);}
     for bucket in buckets{
         let Some(total)=super::number(&bucket["total_units"]).filter(|n|*n>0.0) else{continue;};
@@ -75,12 +75,12 @@ fn start(v:&Value)->Result<Snapshot,String>{
         if reset.is_some_and(|t|t<=snapshot.at){continue;}
         snapshot.windows.push(Window{label:bucket["show_name"].as_str().filter(|s|!s.is_empty()).unwrap_or("体验额度").into(),seconds:None,remaining:(left/total*100.0).clamp(0.0,100.0) as f32,reset});
     }
-    if snapshot.windows.is_empty(){return Err("当前 ZCode 账号暂无有效体验额度".into());}
+    if snapshot.windows.is_empty(){return Err("This ZCode account has no active trial quota".into());}
     Ok(snapshot)
 }
 pub(super) fn fetch(agent:&ureq::Agent,a:&Account)->Result<Snapshot,String>{
     let root=super::login_json(&a.source)?;let l=login(&root)?;
-    if a.slot.as_ref()!=Some(&l.slot){return Err("ZCode 已切换账号，请重新识别本机账号".into());}
+    if a.slot.as_ref()!=Some(&l.slot){return Err("ZCode switched accounts. Please re-detect the local account".into());}
     let key=format!("account-provider:coding-plan:account:{}-individual-coding-plan:account:{}:api-key",l.family,l.subject);
     let mut no_coding_plan=false;
     if root.get(&key).is_some(){
@@ -88,7 +88,7 @@ pub(super) fn fetch(agent:&ureq::Agent,a:&Account)->Result<Snapshot,String>{
         let v=read(agent,url,&value(&root,&key)?,None)?;
         if success(&v){return coding(&v);}
         let msg=v["msg"].as_str().or_else(||v["message"].as_str()).unwrap_or("").to_lowercase();
-        if !(msg.contains("不存在coding plan")||msg.contains("不存在 coding plan")||msg.contains("no coding plan")){return Err(format!("ZCode 编程套餐查询失败（{}）",v["code"]));}
+        if !(msg.contains("不存在coding plan")||msg.contains("不存在 coding plan")||msg.contains("no coding plan")){return Err(format!("ZCode coding plan query failed ({})",v["code"]));}
         no_coding_plan=true;
     }
     let mut url=url::Url::parse("https://zcode.z.ai/api/v1/zcode-plan/billing/balance").unwrap();
@@ -103,9 +103,9 @@ pub(super) fn fetch(agent:&ureq::Agent,a:&Account)->Result<Snapshot,String>{
     }
     let telemetry=a.source.with_file_name("telemetry-state.json");
     let device=super::login_json(&telemetry).ok();
-    let mid=device.as_ref().and_then(|v|v["deviceMid"].as_str()).filter(|s|!s.is_empty() && s.bytes().all(|b|b.is_ascii_graphic())).ok_or("请打开 ZCode，等待客户端初始化设备信息")?;
-    let v=read(agent,url.as_str(),&format!("Bearer {}",l.jwt),Some(mid)).map_err(|e|if no_coding_plan{format!("未开通 Coding Plan；体验套餐查询失败：{e}")}else{e})?;
-    if !success(&v){return Err(format!("ZCode 体验额度暂不可用（{}）",v["code"]));}
+    let mid=device.as_ref().and_then(|v|v["deviceMid"].as_str()).filter(|s|!s.is_empty() && s.bytes().all(|b|b.is_ascii_graphic())).ok_or("Please open ZCode and wait for it to initialize device info")?;
+    let v=read(agent,url.as_str(),&format!("Bearer {}",l.jwt),Some(mid)).map_err(|e|if no_coding_plan{format!("No Coding Plan; trial plan query failed: {e}")}else{e})?;
+    if !success(&v){return Err(format!("ZCode trial quota unavailable ({})",v["code"]));}
     start(&v)
 }
 #[cfg(test)]

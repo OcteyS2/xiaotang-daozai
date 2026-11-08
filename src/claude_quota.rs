@@ -27,8 +27,8 @@ pub(super) fn local_source(path:&Path)->PathBuf{
     if path.file_name().is_some_and(|s|s==".credentials.json"||s=="settings.json"){path.with_file_name(CODE_USAGE)}else{path.to_owned()}
 }
 fn read_json(path:&Path)->Result<Value,String>{
-    let raw=fs::read(path).map_err(|_|"尚无 Claude 本地用量记录，请在官方客户端使用后刷新".to_string())?;
-    serde_json::from_slice(raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw)).map_err(|_|"Claude 本地用量记录暂不可读，等待客户端更新".into())
+    let raw=fs::read(path).map_err(|_|"No local Claude usage records yet. Use the official client, then refresh".to_string())?;
+    serde_json::from_slice(raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw)).map_err(|_|"Claude local usage records unreadable for now, waiting for client update".into())
 }
 fn slot(owner:&str,org:&str)->String{digest::digest(&digest::SHA256,format!("{owner}|{org}").as_bytes()).as_ref().iter().map(|b|format!("{b:02x}")).collect()}
 fn desktop_identity(path:&Path)->Result<(String,i64),String>{
@@ -36,34 +36,34 @@ fn desktop_identity(path:&Path)->Result<(String,i64),String>{
     #[derive(serde::Deserialize)]
     struct Identity {#[serde(rename="lastKnownAccountUuid")] owner:String}
     use std::io::Read;
-    let mut file=fs::File::open(path.with_file_name("config.json")).map_err(|_|"无法确认 Claude 桌面版本地账号")?;
-    let stamp=file.metadata().and_then(|m|m.modified()).map_err(|_|"无法确认 Claude 账号配置的更新时间")?;
-    let mut raw=Vec::new();file.read_to_end(&mut raw).map_err(|_|"无法读取 Claude 账号配置")?;
-    let identity:Identity=serde_json::from_slice(raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw)).map_err(|_|"请先在 Claude 桌面版登录".to_string())?;
-    if identity.owner.is_empty(){return Err("请先在 Claude 桌面版登录".into());}Ok((identity.owner,chrono::DateTime::<chrono::Utc>::from(stamp).timestamp_millis()))
+    let mut file=fs::File::open(path.with_file_name("config.json")).map_err(|_|"Can't confirm the local Claude Desktop account")?;
+    let stamp=file.metadata().and_then(|m|m.modified()).map_err(|_|"Can't confirm when the Claude account config was updated")?;
+    let mut raw=Vec::new();file.read_to_end(&mut raw).map_err(|_|"Can't read Claude account config")?;
+    let identity:Identity=serde_json::from_slice(raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw)).map_err(|_|"Please sign in to Claude Desktop first".to_string())?;
+    if identity.owner.is_empty(){return Err("Please sign in to Claude Desktop first".into());}Ok((identity.owner,chrono::DateTime::<chrono::Utc>::from(stamp).timestamp_millis()))
 }
 fn code_identity(path:&Path)->Result<(String,String),String>{
-    let dir=path.parent().ok_or("未找到 Claude Code 本地目录")?;
+    let dir=path.parent().ok_or("Claude Code local directory not found")?;
     let identity=if dir.join(".claude.json").is_file(){dir.join(".claude.json")}else if dir.file_name().is_some_and(|n|n==".claude"){PathBuf::from(format!("{}.json",dir.to_string_lossy()))}else{dir.join(".claude.json")};
     #[derive(serde::Deserialize)]
     struct Identity {#[serde(rename="oauthAccount")] account:IdentityAccount}
     #[derive(serde::Deserialize)]
     struct IdentityAccount {#[serde(rename="accountUuid")] owner:String,#[serde(rename="organizationUuid")] org:String}
-    let raw=fs::read(identity).map_err(|_|"请先在 Claude Code 登录订阅账号".to_string())?;
-    let value:Identity=serde_json::from_slice(raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw)).map_err(|_|"无法确认 Claude Code 本地账号".to_string())?;
-    if value.account.owner.is_empty()||value.account.org.is_empty(){return Err("无法确认 Claude Code 本地账号".into());}
+    let raw=fs::read(identity).map_err(|_|"Please sign in to a subscription account in Claude Code first".to_string())?;
+    let value:Identity=serde_json::from_slice(raw.strip_prefix(b"\xef\xbb\xbf").unwrap_or(&raw)).map_err(|_|"Can't confirm the local Claude Code account".to_string())?;
+    if value.account.owner.is_empty()||value.account.org.is_empty(){return Err("Can't confirm the local Claude Code account".into());}
     Ok((value.account.owner,value.account.org))
 }
 fn desktop_record(path:&Path,account:Option<&Account>,verified_cache:&Path)->Result<(String,Snapshot),String>{
     let (owner,login_stamp)=desktop_identity(path)?;let data=read_json(&path.with_file_name(HISTORY))?;
-    if data["version"].as_u64()!=Some(2){return Err("本地记录缺少账号归属，请更新 Claude 桌面版后重试".into());}
+    if data["version"].as_u64()!=Some(2){return Err("Local records lack account ownership. Update Claude Desktop and retry".into());}
     let now=chrono::Utc::now().timestamp_millis();
-    let sample=data["samples"].as_array().into_iter().flatten().filter(|s|s["t"].as_i64().is_some_and(|t|t>0&&t<=now)).max_by_key(|s|s["t"].as_i64()).ok_or("请在 Claude 桌面版打开用量页面，等待当前账号产生新记录")?;
-    let org=sample["org"].as_str().filter(|s|!s.is_empty()).ok_or("本地用量记录缺少账号归属，等待 Claude 更新")?;
+    let sample=data["samples"].as_array().into_iter().flatten().filter(|s|s["t"].as_i64().is_some_and(|t|t>0&&t<=now)).max_by_key(|s|s["t"].as_i64()).ok_or("Open the usage page in Claude Desktop and wait for new records from the current account")?;
+    let org=sample["org"].as_str().filter(|s|!s.is_empty()).ok_or("Local usage records lack account ownership, waiting for a Claude update")?;
     let account_slot=slot(&owner,org);
-    if account.is_some_and(|a|a.slot.as_deref()!=Some(account_slot.as_str())){return Err("Claude 本地账号已变化，请重新连接".into());}
+    if account.is_some_and(|a|a.slot.as_deref()!=Some(account_slot.as_str())){return Err("Local Claude account changed, please reconnect".into());}
     let mut snapshot=Snapshot{at:sample["t"].as_i64().unwrap()/1000,..Default::default()};
-    for (key,label,seconds) in [("fh","5 小时",18000),("sd","本周",604800)]{
+    for (key,label,seconds) in [("fh","5h",18000),("sd","Weekly",604800)]{
         if let Some(used)=sample["u"][key].as_f64().filter(|n|n.is_finite()&&(0.0..=100.0).contains(n)){
             snapshot.windows.push(Window{label:label.into(),seconds:Some(seconds),remaining:(100.0-used) as f32,reset:None});
         }
@@ -76,10 +76,10 @@ fn desktop_record(path:&Path,account:Option<&Account>,verified_cache:&Path)->Res
         snapshot=account.and_then(|a|{
             let raw=fs::read(verified_cache).ok()?;
             a.cached_snapshot(&serde_json::from_slice(&raw).ok()?)
-        }).ok_or("请在 Claude 桌面版打开用量页面，等待当前账号产生新记录")?;
+        }).ok_or("Open the usage page in Claude Desktop and wait for new records from the current account")?;
     }
-    if snapshot.windows.is_empty(){return Err("Claude 本地记录暂无可用额度".into());}
-    if desktop_identity(path)?!=(owner,login_stamp){return Err("Claude 账号配置已变化，请刷新重试".into());}
+    if snapshot.windows.is_empty(){return Err("No usable quota in local Claude records yet".into());}
+    if desktop_identity(path)?!=(owner,login_stamp){return Err("Claude account config changed, please refresh and retry".into());}
     Ok((account_slot,snapshot))
 }
 fn code_slot(path:&Path)->Result<String,String>{let(owner,org)=code_identity(path)?;Ok(format!("code-{}",slot(&owner,&org)))}
@@ -92,12 +92,12 @@ pub(super) fn fetch(account:&Account)->Result<Snapshot,String>{
     let path=local_source(&account.source);
     let (slot,mut snapshot)=if is_desktop(&path){desktop_record(&path,Some(account),&crate::model::config_dir().join("ai-quota-cache.json"))?}else{
         let slot=code_slot(&path)?;let data=read_json(&path)?;
-        if data["version"].as_u64()!=Some(1){return Err("Claude Code 本地记录格式不匹配，请启用本地采集".into());}
+        if data["version"].as_u64()!=Some(1){return Err("Claude Code local record format mismatch. Please enable local collection".into());}
         let cache_slot=format!("code-{}",self::slot(data["account"].as_str().unwrap_or_default(),data["organization"].as_str().unwrap_or_default()));
-        if slot!=cache_slot{return Err("Claude Code 账号已变化，等待新账号的本地记录".into());}
-        let at=data["at"].as_i64().filter(|at|*at>0&&*at<=chrono::Utc::now().timestamp()+60).ok_or("Claude 本地记录时间无效")?;
+        if slot!=cache_slot{return Err("Claude Code account changed, waiting for local records of the new account".into());}
+        let at=data["at"].as_i64().filter(|at|*at>0&&*at<=chrono::Utc::now().timestamp()+60).ok_or("Invalid Claude local record time")?;
         let mut snapshot=Snapshot{at,..Default::default()};
-        for (key,label,seconds) in [("five_hour","5 小时",18000),("seven_day","本周",604800)]{
+        for (key,label,seconds) in [("five_hour","5h",18000),("seven_day","Weekly",604800)]{
             let window=&data["rate_limits"][key];
             if let Some(used)=window["used_percentage"].as_f64().filter(|n|n.is_finite()&&(0.0..=100.0).contains(n)){
                 let reset=window["resets_at"].as_i64().filter(|t|*t>0);
@@ -105,29 +105,29 @@ pub(super) fn fetch(account:&Account)->Result<Snapshot,String>{
                 snapshot.windows.push(Window{label:label.into(),seconds:Some(seconds),remaining:(100.0-used) as f32,reset});
             }
         }
-        if snapshot.windows.is_empty(){return Err("尚无有效的 Claude Code 本地额度，等待下一次使用".into());}
+        if snapshot.windows.is_empty(){return Err("No valid local Claude Code quota yet, waiting for next use".into());}
         (slot,snapshot)
     };
-    if account.slot.as_deref()!=Some(slot.as_str()){return Err("Claude 本地账号已变化，请重新连接".into());}
+    if account.slot.as_deref()!=Some(slot.as_str()){return Err("Local Claude account changed, please reconnect".into());}
     snapshot.windows.sort_by_key(|w|w.seconds);Ok(snapshot)
 }
 pub(super) fn code_path()->PathBuf{
     std::env::var_os("CLAUDE_CONFIG_DIR").filter(|s|!s.is_empty()).map(PathBuf::from).unwrap_or_else(||std::env::var_os("USERPROFILE").or_else(||std::env::var_os("HOME")).map(PathBuf::from).unwrap_or_default().join(".claude")).join(CODE_USAGE)
 }
 pub(super) fn install_code_collector(path:&Path)->Result<(),String>{
-    code_identity(path)?;let dir=path.parent().ok_or("未找到 Claude Code 目录")?;let settings_path=dir.join("settings.json");
+    code_identity(path)?;let dir=path.parent().ok_or("Claude Code directory not found")?;let settings_path=dir.join("settings.json");
     let mut settings=if settings_path.is_file(){read_json(&settings_path)?}else{json!({})};
-    if !settings.is_object(){return Err("Claude Code 的 settings.json 顶层必须是 JSON 对象，请修正后重试".into());}
+    if !settings.is_object(){return Err("Claude Code's settings.json must be a JSON object at the top level. Please fix it and retry".into());}
     let script=dir.join(COLLECTOR);let command=format!("powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"{}\"",script.to_string_lossy().replace('\\',"/"));
     if !settings["statusLine"].is_null()&&settings["statusLine"]["command"].as_str()!=Some(command.as_str()){
-        return Err("Claude Code 已有状态栏配置，已保留；可选择现有脚本导出的本地用量 JSON".into());
+        return Err("Claude Code already has a status line config, kept as is; you can choose the local usage JSON exported by your existing script".into());
     }
     let needs_status_line=settings["statusLine"].is_null();
     let script_content=format!("\u{feff}{}",include_str!("../scripts/claude-statusline.ps1"));
-    crate::model::atomic_write(&script,script_content.as_bytes()).map_err(|_|"无法保存 Claude 本地采集脚本".to_string())?;
+    crate::model::atomic_write(&script,script_content.as_bytes()).map_err(|_|"Can't save the Claude local collection script".to_string())?;
     if !needs_status_line{return Ok(());}
     settings["statusLine"]=json!({"type":"command","command":command});
-    crate::model::atomic_write(&settings_path,&serde_json::to_vec_pretty(&settings).map_err(|_|"无法保存 Claude Code 设置")?).map_err(|_|"无法更新 Claude Code 状态栏配置".into())
+    crate::model::atomic_write(&settings_path,&serde_json::to_vec_pretty(&settings).map_err(|_|"Can't save Claude Code settings")?).map_err(|_|"Can't update Claude Code status line config".into())
 }
 
 #[cfg(test)]

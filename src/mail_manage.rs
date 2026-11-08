@@ -16,13 +16,13 @@ mod protocol{
     use super::*;
     use std::io::{Read,Write};
     fn fail(context:&str,error:imap::Error)->String{
-        let detail=match error{imap::Error::No(_)=>"服务器拒绝操作",imap::Error::Bad(_)=>"服务器不支持该操作",_=>"连接中断，请刷新后确认结果"};
-        format!("{context}：{detail}")
+        let detail=match error{imap::Error::No(_)=>"Server rejected the operation",imap::Error::Bad(_)=>"Server doesn’t support this operation",_=>"Connection lost; refresh to check the result"};
+        format!("{context}: {detail}")
     }
     fn set(uids:&[u32])->String{uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",")}
     fn trash<S:Read+Write>(session:&mut imap::Session<S>)->Result<String,String>{
         use imap::types::NameAttribute;
-        let names=session.list(Some(""),Some("*")).map_err(|e|fail("读取回收站",e))?;
+        let names=session.list(Some(""),Some("*")).map_err(|e|fail("Reading trash",e))?;
         let selectable=|n:&&imap::types::Name|!n.attributes().contains(&NameAttribute::NoSelect);
         let special=names.iter().filter(selectable).find(|n|n.attributes().iter().any(|a|matches!(a,NameAttribute::Custom(s) if s.eq_ignore_ascii_case("\\Trash"))));
         if let Some(n)=special{return Ok(n.name().into());}
@@ -34,33 +34,33 @@ mod protocol{
             aliases.push(format!("&{}-",base64::engine::general_purpose::STANDARD_NO_PAD.encode(bytes).replace('/',",")));aliases.push(name.into());
         }
         names.iter().filter(selectable).find(|n|aliases.iter().any(|alias|n.name().eq_ignore_ascii_case(alias)))
-            .map(|n|n.name().into()).ok_or_else(||"未识别到邮箱回收站，请先在邮箱客户端确认回收站文件夹".into())
+            .map(|n|n.name().into()).ok_or_else(||"Couldn’t find the mailbox trash; check the trash folder in your mail client first".into())
     }
     fn select<S:Read+Write>(session:&mut imap::Session<S>,name:&str,expected:Option<u32>,write:bool)->Result<(u32,u32),String>{
-        let mailbox=if write{session.select(name)}else{session.examine(name)}.map_err(|e|fail("打开邮件文件夹",e))?;
-        let validity=mailbox.uid_validity.filter(|v|*v>0).ok_or("邮箱未提供稳定的邮件标识，暂不能整理")?;
-        if write && expected!=Some(validity){return Err("邮件列表已变化，请刷新后重试".into());}
+        let mailbox=if write{session.select(name)}else{session.examine(name)}.map_err(|e|fail("Opening mail folder",e))?;
+        let validity=mailbox.uid_validity.filter(|v|*v>0).ok_or("Mailbox has no stable message IDs; can’t organize yet")?;
+        if write && expected!=Some(validity){return Err("Mail list changed; refresh and retry".into());}
         Ok((validity,mailbox.exists))
     }
     fn change<S:Read+Write>(session:&mut imap::Session<S>,request:&Request,destination:Option<&str>)->Result<(),String>{
         let uid=match request.action{Action::Read{uid,..}|Action::Move{uid}=>Some(uid),_=>None};
         if let Some(uid)=uid{
-            if uid==0{return Err("邮件标识无效，请刷新".into());}
-            if !session.uid_search(format!("UID {uid}")).map_err(|e|fail("确认邮件",e))?.contains(&uid){return Err("这封邮件已被其他客户端移走，请刷新".into());}
+            if uid==0{return Err("Invalid message ID; please refresh".into());}
+            if !session.uid_search(format!("UID {uid}")).map_err(|e|fail("Verifying message",e))?.contains(&uid){return Err("This email was moved by another client; please refresh".into());}
         }
         match request.action{
             Action::Load=>{},
-            Action::Read{uid,seen}=>{session.uid_store(uid.to_string(),if seen{"+FLAGS.SILENT (\\Seen)"}else{"-FLAGS.SILENT (\\Seen)"}).map_err(|e|fail("更新已读状态",e))?;},
+            Action::Read{uid,seen}=>{session.uid_store(uid.to_string(),if seen{"+FLAGS.SILENT (\\Seen)"}else{"-FLAGS.SILENT (\\Seen)"}).map_err(|e|fail("Updating read status",e))?;},
             Action::ReadAll=>{
-                let mut uids=session.uid_search("UNSEEN UNDELETED").map_err(|e|fail("读取未读邮件",e))?.into_iter().collect::<Vec<_>>();uids.sort_unstable();
-                for batch in uids.chunks(200){session.uid_store(set(batch),"+FLAGS.SILENT (\\Seen)").map_err(|e|fail("全部标为已读",e))?;}
+                let mut uids=session.uid_search("UNSEEN UNDELETED").map_err(|e|fail("Reading unread mail",e))?.into_iter().collect::<Vec<_>>();uids.sort_unstable();
+                for batch in uids.chunks(200){session.uid_store(set(batch),"+FLAGS.SILENT (\\Seen)").map_err(|e|fail("Marking all as read",e))?;}
             },
             Action::Move{uid}=>{
-                let destination=destination.ok_or("未找到目标邮件文件夹")?;
-                let caps=session.capabilities().map_err(|e|fail("检查邮箱能力",e))?;
+                let destination=destination.ok_or("Destination mail folder not found")?;
+                let caps=session.capabilities().map_err(|e|fail("Checking mailbox capabilities",e))?;
                 if caps.has_str("MOVE"){
-                    session.uid_mv(uid.to_string(),destination).map_err(|e|fail("移动邮件",e))?;
-                }else{return Err("邮箱未提供 MOVE，无法安全移动邮件。可关闭同步在本机整理，或在邮箱客户端操作".into());}
+                    session.uid_mv(uid.to_string(),destination).map_err(|e|fail("Moving message",e))?;
+                }else{return Err("Mailbox doesn’t support MOVE, so messages can’t be moved safely. Turn off sync to organize locally, or use your mail client".into());}
             }
         }
         Ok(())
@@ -72,12 +72,12 @@ mod protocol{
         let(validity,mut exists)=select(session,name,request.validity,write)?;
         let destination=if request.folder==Folder::Inbox{trash.as_deref()}else{Some("INBOX")};
         change(session,request,destination)?;
-        if write{let(current,count)=select(session,name,None,false)?;if current!=validity{return Err("邮件文件夹已变化，请刷新后确认操作结果".into());}exists=count;}
+        if write{let(current,count)=select(session,name,None,false)?;if current!=validity{return Err("Mail folder changed; refresh to check the result".into());}exists=count;}
         let mut entries=Vec::new();let mut items=Vec::new();
         if exists>0{
             let limit=request.known.len().clamp(20,60) as u32;
             let first=exists.saturating_sub(limit-1).max(1);
-            let fetched=session.fetch(format!("{first}:*"),"(UID FLAGS)").map_err(|e|fail("读取最近邮件状态",e))?;
+            let fetched=session.fetch(format!("{first}:*"),"(UID FLAGS)").map_err(|e|fail("Reading recent mail status",e))?;
             for f in fetched.iter().filter(|f|!f.flags().contains(&imap::types::Flag::Deleted)){
                 if let Some(uid)=f.uid{entries.push((uid,f.flags().contains(&imap::types::Flag::Seen)));}
             }
@@ -85,14 +85,14 @@ mod protocol{
         }
         let extra:Vec<_>=request.extra.iter().filter(|(v,uid)|*v==validity&&*uid>0&&!entries.iter().any(|(id,_)|id==uid)).map(|(_,uid)|*uid).take(60).collect();
         if !extra.is_empty(){
-            let fetched=session.uid_fetch(set(&extra),"(UID FLAGS)").map_err(|e|fail("读取本机回收站邮件状态",e))?;
+            let fetched=session.uid_fetch(set(&extra),"(UID FLAGS)").map_err(|e|fail("Reading local trash mail status",e))?;
             for f in fetched.iter().filter(|f|!f.flags().contains(&imap::types::Flag::Deleted)){
                 if let Some(uid)=f.uid{if !entries.iter().any(|(id,_)|*id==uid){entries.push((uid,f.flags().contains(&imap::types::Flag::Seen)));}}
             }
         }
         for (uid,_) in &entries{
             if request.validity==Some(validity)&&request.known.contains(uid){continue;}
-            if let Some(item)=crate::mail::fetch::item(session,*uid,&request.account).map_err(|_|"读取邮件失败，请刷新后重试")?{items.push(item);}
+            if let Some(item)=crate::mail::fetch::item(session,*uid,&request.account).map_err(|_|"Failed to read mail; refresh and retry")?{items.push(item);}
         }
         Ok(Snapshot{validity,entries,items})
     }

@@ -60,7 +60,7 @@ pub struct State {
 
 /// 菜单固定中文：启动 / 吉祥物 / 极简 / —— / 设置 / 关于 / 退出。
 fn labels() -> [&'static str; 6] {
-    ["开机启动", "吉祥物", "极简刘海", "关于岛仔", "退出", "设置…"]
+    ["Launch at Startup", "Mascot", "Minimal Notch", "About Daozai", "Quit", "Settings…"]
 }
 
 struct Ctx {
@@ -152,7 +152,7 @@ fn add_icon(hwnd: HWND, hicon: HICON) -> bool {
         hIcon: hicon,
         ..Default::default()
     };
-    fill_tip(&mut nid.szTip, "岛仔");
+    fill_tip(&mut nid.szTip, "Daozai");
     unsafe {
         if !Shell_NotifyIconW(NIM_ADD, &nid).as_bool() {
             // explorer 里已有同名残留时，用 MODIFY 顶掉
@@ -222,10 +222,10 @@ fn menu_items(menu: HMENU) -> Vec<(String, bool, bool)> {
 
 fn about() {
     let text = wide(&format!(
-        "岛仔 {}\n\nWindows 桌面灵动岛小助手\n退出请右键托盘图标，选择「退出」。",
+        "Daozai {}\n\nA Dynamic Island helper for the Windows desktop\nTo quit, right-click the tray icon and choose 'Quit'.",
         env!("CARGO_PKG_VERSION")
     ));
-    let title = wide("关于岛仔");
+    let title = wide("About Daozai");
     unsafe {
         MessageBoxW(
             None,
@@ -373,7 +373,7 @@ impl Tray {
             .name("daozai-tray".into())
             .spawn(move || unsafe {
                 let Ok(module) = GetModuleHandleW(None) else {
-                    let _ = ready_tx.send(Err("GetModuleHandleW 失败".to_string()));
+                    let _ = ready_tx.send(Err("GetModuleHandleW failed".to_string()));
                     return;
                 };
                 let hinst = HINSTANCE(module.0);
@@ -407,12 +407,12 @@ impl Tray {
                 ) {
                     Ok(h) => h,
                     Err(e) => {
-                        let _ = ready_tx.send(Err(format!("创建托盘窗口失败：{e}")));
+                        let _ = ready_tx.send(Err(format!("Failed to create tray window: {e}")));
                         return;
                     }
                 };
                 let Some(hicon) = load_icon() else {
-                    let _ = ready_tx.send(Err("读取托盘图标失败".to_string()));
+                    let _ = ready_tx.send(Err("Failed to load tray icon".to_string()));
                     return;
                 };
                 let ctx = Box::new(Ctx {
@@ -450,7 +450,7 @@ impl Tray {
                 return None;
             }
             Err(_) => {
-                eprintln!("tray: 启动超时");
+                eprintln!("tray: startup timed out");
                 return None;
             }
         };
@@ -550,11 +550,11 @@ pub fn set_autostart(on: bool) -> Result<(), String> {
             let value = format!("\"{}\"", exe.display());
             let utf16 = wide(&value);
             let bytes = std::slice::from_raw_parts(utf16.as_ptr() as *const u8, utf16.len() * 2);
-            let key = run_key().ok_or_else(|| "打不开 HKCU\\Run".to_string())?;
+            let key = run_key().ok_or_else(|| "Can’t open HKCU\\Run".to_string())?;
             let rc = RegSetValueExW(key, RUN_VALUE, 0, REG_SZ, Some(bytes));
             let _ = RegCloseKey(key);
             if rc.0 != 0 {
-                return Err(format!("写 HKCU\\Run 失败：{}", rc.0));
+                return Err(format!("Failed to write HKCU\\Run: {}", rc.0));
             }
         } else {
             let mut key = HKEY::default();

@@ -82,7 +82,7 @@ fn parse_body(raw:&[u8],headers:&[u8],at:i64,now:i64)->Option<Snapshot>{
     }else{decoded.extend_from_slice(raw);}
     if decoded.len()>MAX_BODY{return None;}
     let data:Usage=serde_json::from_slice(&decoded).ok()?;let mut snapshot=Snapshot{at,..Default::default()};
-    for (window,kind,label,seconds) in [(data.five_hour,"session","5 小时",18000),(data.seven_day,"weekly_all","本周",604800)]{
+    for (window,kind,label,seconds) in [(data.five_hour,"session","5h",18000),(data.seven_day,"weekly_all","Weekly",604800)]{
         let Some(window)=window.as_ref().or_else(||data.limits.iter().find(|w|w.kind.as_deref()==Some(kind)))else{continue;};
         let Some(used)=window.utilization.or(window.used_percentage).or(window.percent).filter(|n|n.is_finite()&&(0.0..=100.0).contains(n))else{continue;};
         let reset=window.resets_at.as_str().and_then(|s|chrono::DateTime::parse_from_rfc3339(s).ok()).map(|t|t.timestamp()).filter(|t|*t>now&&*t>at&&*t<=at+seconds+60);

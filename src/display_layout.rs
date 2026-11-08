@@ -24,7 +24,7 @@ pub fn connected()->Vec<Display>{
             let name=if found{text(&details.DeviceString)}else{String::new()};
             let number=device.trim_start_matches(r"\\.\DISPLAY");let r=info.monitorInfo.rcMonitor;
             let primary=info.monitorInfo.dwFlags&1!=0;
-            let label=format!("显示器 {number}{} · {} × {}{}",if name.is_empty(){String::new()}else{format!(" · {name}")},r.right-r.left,r.bottom-r.top,if primary{" · 主屏"}else{""});
+            let label=format!("Display {number}{} · {} × {}{}",if name.is_empty(){String::new()}else{format!(" · {name}")},r.right-r.left,r.bottom-r.top,if primary{" · Primary"}else{""});
             let displays=&mut *(data.0 as *mut Vec<Display>);
             displays.push(Display{id:if stable_id.is_empty(){device}else{stable_id},label,bounds:Bounds{left:r.left,top:r.top,right:r.right,bottom:r.bottom},primary});
         }

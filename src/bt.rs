@@ -47,7 +47,7 @@ impl Device {
     /// 通知条正文：`名称 · 电量 80%`，设备没上报电量时只写名称。
     pub fn summary(&self) -> String {
         match self.battery {
-            Some(b) => format!("{} · 电量 {b}%", self.name),
+            Some(b) => format!("{} · Battery {b}%", self.name),
             None => self.name.clone(),
         }
     }

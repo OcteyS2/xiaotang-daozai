@@ -99,27 +99,27 @@ impl Snapshot {
         if self.audio_endpoint == old.audio_endpoint && self.volume != old.volume {
             if let Some((v, mute)) = self.volume {
                 out.push((
-                    "系统音量".into(),
+                    "System Volume".into(),
                     if mute {
-                        "已静音".into()
+                        "Muted".into()
                     } else {
-                        format!("音量 {v}%")
+                        format!("Volume {v}%")
                     },
                 ));
             }
         }
         if self.caps != old.caps {
             out.push((
-                "大写锁定".into(),
-                if self.caps { "已开启" } else { "已关闭" }.into(),
+                "Caps Lock".into(),
+                if self.caps { "On" } else { "Off" }.into(),
             ));
         }
         if self.network != old.network || self.network && self.network_kind != old.network_kind {
             let kind=if self.network {self.network_kind}else{old.network_kind};
-            let status=if self.network {"网络已连接"}else{"网络已断开"};
+            let status=if self.network {"Connected"}else{"Disconnected"};
             out.push((
-                "网络连接".into(),
-                match kind {NetworkKind::Wifi=>format!("Wi-Fi · {status}"),NetworkKind::Ethernet=>format!("以太网 · {status}"),NetworkKind::Other=>status.into()},
+                "Network".into(),
+                match kind {NetworkKind::Wifi=>format!("Wi-Fi · {status}"),NetworkKind::Ethernet=>format!("Ethernet · {status}"),NetworkKind::Other=>status.into()},
             ));
         }
         out
@@ -283,7 +283,7 @@ fn notification_identity(n:&UserNotification, number:u32, created:i64, known_qq:
         return ("QQ".into(),"QQ".into());
     }
     let name=info.and_then(|app|app.DisplayInfo().ok()).and_then(|display|display.DisplayName().ok())
-        .map(|name|name.to_string()).filter(|name|!name.trim().is_empty()).unwrap_or_else(||"Windows 通知".into());
+        .map(|name|name.to_string()).filter(|name|!name.trim().is_empty()).unwrap_or_else(||"Windows Notification".into());
     let id=if id.is_empty(){name.clone()}else{id};
     (name,id)
 }
@@ -334,11 +334,11 @@ impl NotificationBaseline {
 fn qq_channel_status()->String{
     use windows::UI::Notifications::{NotificationSetting,ToastNotificationManager};
     match ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from("QQ")).and_then(|notifier|notifier.Setting()){
-        Ok(NotificationSetting::Enabled)=>"QQ 系统通知通道可用".into(),
-        Ok(NotificationSetting::DisabledForApplication)=>"QQ 系统通知已关闭，请在 Windows 通知设置中开启后重新连接".into(),
-        Ok(NotificationSetting::DisabledForUser)=>"Windows 系统通知已关闭，请开启后重新连接".into(),
-        Ok(NotificationSetting::DisabledByGroupPolicy)=>"系统策略禁止通知".into(),
-        _=>"QQ 系统通知通道未就绪，请检查 QQ 安装和通知设置后重新连接".into(),
+        Ok(NotificationSetting::Enabled)=>"QQ system notification channel available".into(),
+        Ok(NotificationSetting::DisabledForApplication)=>"QQ system notifications are off; turn them on in Windows notification settings, then reconnect".into(),
+        Ok(NotificationSetting::DisabledForUser)=>"Windows system notifications are off; turn them on, then reconnect".into(),
+        Ok(NotificationSetting::DisabledByGroupPolicy)=>"Notifications blocked by system policy".into(),
+        _=>"QQ system notification channel not ready; check QQ installation and notification settings, then reconnect".into(),
     }
 }
 
@@ -361,7 +361,7 @@ pub fn connect(ctx:eframe::egui::Context,qq_only:bool) -> Result<Notifications> 
             let _apartment=Apartment;
             if request.get()? != UserNotificationListenerAccessStatus::Allowed {
                 send(Incoming::Revoked);
-                send(Incoming::Status("Windows 未授予通知读取权限，可在系统设置中调整。".into()));
+                send(Incoming::Status("Windows hasn't granted notification access; you can change this in system settings.".into()));
                 return Ok(());
             }
             let listener = UserNotificationListener::Current()?;
@@ -372,7 +372,7 @@ pub fn connect(ctx:eframe::egui::Context,qq_only:bool) -> Result<Notifications> 
                 if stopped.try_recv()!=Err(mpsc::TryRecvError::Empty){return Ok(());}
                 if listener.GetAccessStatus()? != UserNotificationListenerAccessStatus::Allowed {
                     send(Incoming::Revoked);
-                    send(Incoming::Status("通知权限已被关闭".into()));
+                    send(Incoming::Status("Notification permission has been turned off".into()));
                     return Ok(());
                 }
                 let items=listener.GetNotificationsAsync(NotificationKinds::Toast)?.get()?;
@@ -393,7 +393,7 @@ pub fn connect(ctx:eframe::egui::Context,qq_only:bool) -> Result<Notifications> 
                     let version=ToastVersion::new(created,qq.then_some(body.as_str()));
                     current.insert(number,version);
                     if baseline.changed(number,version){
-                        let body=if qq && body.trim().is_empty(){"有新消息".into()}else{body};
+                        let body=if qq && body.trim().is_empty(){"New message".into()}else{body};
                         if !body.trim().is_empty(){messages.push((created,app,id,body));}
                     }
                 }
@@ -402,7 +402,7 @@ pub fn connect(ctx:eframe::egui::Context,qq_only:bool) -> Result<Notifications> 
                 for (_,app,id,body) in messages {
                     if !send(Incoming::Message(app,id,body)){return Ok(());}
                 }
-                let status=if qq_only{format!("仅监听 QQ · {qq_status}")}else{format!("正在监听 Windows 通知 · 当前可见 {} 条\n{qq_status}",items.Size()?)};
+                let status=if qq_only{format!("Listening to QQ only · {qq_status}")}else{format!("Listening to Windows notifications · {} visible\n{qq_status}",items.Size()?)};
                 if status!=last_status {
                     if !send(Incoming::Status(status.clone())){return Ok(());}
                     last_status=status;
@@ -411,14 +411,14 @@ pub fn connect(ctx:eframe::egui::Context,qq_only:bool) -> Result<Notifications> 
             }
         };
         if let Err(e) = run() {
-            send(Incoming::Status(format!("Windows 暂不允许读取通知：{}。请检查通知访问权限与应用身份。",e.code())));
+            send(Incoming::Status(format!("Windows doesn't allow reading notifications yet: {}. Please check notification access and app identity.",e.code())));
         }
     }).map_err(|_|windows::core::Error::from_win32())?;
     Ok(Notifications{incoming:rx,stop})
 }
 
 pub fn pick_files() -> Result<Vec<std::path::PathBuf>> {
-    pick_files_for("添加文件到置物架",true)
+    pick_files_for("Add Files to Shelf",true)
 }
 
 pub fn pick_files_for(title:&str,multiple:bool) -> Result<Vec<std::path::PathBuf>> {
@@ -626,7 +626,7 @@ pub(crate) fn avoidance_windows()->std::result::Result<Vec<crate::avoidance::Can
         BOOL(1)
     }
     let mut items:Vec<crate::avoidance::Candidate>=Vec::new();
-    unsafe{EnumWindows(Some(visit),LPARAM(&mut items as *mut _ as isize))}.map_err(|_|"无法读取应用列表，请刷新重试".to_string())?;
+    unsafe{EnumWindows(Some(visit),LPARAM(&mut items as *mut _ as isize))}.map_err(|_|"Can't read the app list; refresh and try again".to_string())?;
     items.sort_by_key(|a|a.name.to_lowercase());
     Ok(items)
 }

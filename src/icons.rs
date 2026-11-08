@@ -57,7 +57,7 @@ impl Cache {
 }
 
 fn load_preview(path:&Path)->Loaded {
-    let metadata=std::fs::metadata(path).map(|metadata|if metadata.is_dir(){"文件夹".into()}else{crate::model::human_size(metadata.len())}).unwrap_or_else(|_|"已移动".into());
+    let metadata=std::fs::metadata(path).map(|metadata|if metadata.is_dir(){"Folder".into()}else{crate::model::human_size(metadata.len())}).unwrap_or_else(|_|"Moved".into());
     Loaded{image:file_icon(path),metadata}
 }
 

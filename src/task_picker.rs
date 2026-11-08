@@ -42,7 +42,7 @@ impl ReminderPicker {
         let Some(date)=Duration::try_days(position).and_then(|delta|self.origin.checked_add_signed(delta)) else{return String::new()};
         let today=Local::now().date_naive();
         if date<today{return String::new();}
-        match (date-today).num_days(){0=>"今天".into(),1=>"明天".into(),2=>"后天".into(),_=>date.format(if date.year()==today.year(){"%m/%d"}else{"%y/%m/%d"}).to_string()}
+        match (date-today).num_days(){0=>"Today".into(),1=>"Tomorrow".into(),2=>"In 2 days".into(),_=>date.format(if date.year()==today.year(){"%m/%d"}else{"%y/%m/%d"}).to_string()}
     }
     pub fn draw(&mut self,c:&Card,title:&str,has_reminder:bool)->Option<PickerAction> {
         let ctx=c.ui.ctx();
@@ -76,7 +76,7 @@ impl ReminderPicker {
                 self.drag[column]-=steps as f32*18.0;self.adjust(column,steps);
             }
             if response.clicked(){if let Some(pos)=response.interact_pointer_pos(){let y=c.to_local(pos).y;if y<68.0{self.adjust(column,-1);}else if y>88.0{self.adjust(column,1);}}}
-            response.on_hover_text(format!("{} · 滚轮、上下拖动或点选调整",["日期","小时","分钟"][column]));
+            response.on_hover_text(format!("{} · Scroll, drag up/down or click to adjust",["Date","Hour","Minute"][column]));
             let position=ctx.animate_value_with_time(egui::Id::new(("reminder-wheel-position",column)),self.positions[column] as f32,if self.focus{0.0}else{0.13});
             let clipped=c.clipped(x,51.0,width,52.0);
             for value in position.floor() as i64-1..=position.floor() as i64+2 {
@@ -89,18 +89,18 @@ impl ReminderPicker {
             }
         }
         let note=self.repeat_note.as_deref();
-        let (label,color)=if !self.error.is_empty(){(self.error.as_str(),theme::RED)}else if let Some(note)=note.filter(|n|!n.is_empty()){(note,theme::BLUE)}else{("已完成",theme::GRAY)};
+        let (label,color)=if !self.error.is_empty(){(self.error.as_str(),theme::RED)}else if let Some(note)=note.filter(|n|!n.is_empty()){(note,theme::BLUE)}else{("Done",theme::GRAY)};
         let w=c.text(42.0,79.0,label,9.0,W::Regular,color,H::Left);
-        if self.error.is_empty() && note==Some(""){c.text(42.0+w+4.0,79.0,"· 下方可设每周重复",9.0,W::Regular,theme::DIM,H::Left);}
+        if self.error.is_empty() && note==Some(""){c.text(42.0+w+4.0,79.0,"· Weekly repeat can be set below",9.0,W::Regular,theme::DIM,H::Left);}
         let (skip,b)=capsule(c,41.0,105.0,100.0,22.0,"task-reminder-skip",theme::BTN,theme::BTN_HOVER);
-        b.centered_text(91.0,116.0,if has_reminder{"取消提醒"}else{"暂不提醒"},10.0,W::Regular,theme::GRAY,H::Center);
+        b.centered_text(91.0,116.0,if has_reminder{"Remove Reminder"}else{"No Reminder"},10.0,W::Regular,theme::GRAY,H::Center);
         if skip.clicked(){return Some(PickerAction::Skip);}
         if c.hit(248.0,108.0,43.0,22.0,"task-reminder-cancel").clicked(){return Some(PickerAction::Cancel);}
-        c.centered_text(269.5,119.0,"取消",10.0,W::Regular,theme::GRAY,H::Center);
+        c.centered_text(269.5,119.0,"Cancel",10.0,W::Regular,theme::GRAY,H::Center);
         let (save,b)=capsule(c,307.0,108.0,63.0,20.0,"task-reminder-save",Color32::from_rgb(10,132,255),Color32::from_rgb(35,150,255));
-        b.centered_text(338.5,118.0,"完成",10.0,W::Semibold,theme::WHITE,H::Center);
+        b.centered_text(338.5,118.0,"Done",10.0,W::Semibold,theme::WHITE,H::Center);
         if save.clicked(){
-            if self.repeat_note.as_deref().is_none_or(str::is_empty) && self.selected()<=Local::now().naive_local(){self.error="请选择晚于当前的时间".into();}
+            if self.repeat_note.as_deref().is_none_or(str::is_empty) && self.selected()<=Local::now().naive_local(){self.error="Please pick a time later than now.".into();}
             else{return Some(PickerAction::Save);}
         }
         None
