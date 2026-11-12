@@ -199,13 +199,14 @@ impl App {
         let (rx, ry, rr) = (79.0, 74.0, 32.0);
         let frac = self.ring_shown.pos.clamp(0.0, 1.0);
         let run = c.ui.ctx().animate_bool_with_time(egui::Id::new("pomo-run"), self.pomo.running, 0.3);
-        let resting=self.pomo.phase!=Phase::Focus;
-        let (top,bottom)=if resting{(theme::SOFT_GREEN,mix(theme::SOFT_GREEN,Color32::BLACK,0.2))}else{(theme::RED_TOP,theme::RED)};
+        let resting=self.pomo.phase==Phase::Rest;
+        let stopwatch=self.pomo.phase==Phase::Stopwatch;
+        let (top,bottom)=if resting{(theme::SOFT_GREEN,mix(theme::SOFT_GREEN,Color32::BLACK,0.2))}else if stopwatch{(theme::BLUE,theme::BLUE_DEEP)}else{(theme::RED_TOP,theme::RED)};
         // 外圈柔光；计时中缓慢呼吸
         let breathe = 0.5 + 0.5 * ((self.t * 2.2).sin() as f32);
         let glow = 0.30 + 0.25 * run * breathe;
         c.glow(rx, ry, 48.0, paint::alpha(bottom, glow * 0.55));
-        c.ring(rx, ry, rr, 7.0, if resting{mix(theme::CARD,top,0.18)}else{Color32::from_rgb(58,22,26)});
+        c.ring(rx, ry, rr, 7.0, if resting||stopwatch{mix(theme::CARD,top,0.18)}else{Color32::from_rgb(58,22,26)});
         // 渐变进度环随当前阶段配色。
         if frac > 0.001 {
             let steps = (120.0 * frac).ceil().max(2.0) as usize;
@@ -228,8 +229,10 @@ impl App {
             crate::focus_bar::tea(&c.scaled(rx,ry,2.2),rx,ry,frac,t);
         }else{paint::stopwatch(c, rx, ry + 0.5, 15.5, hand * run, theme::WHITE);}
 
-        let secs = self.pomo.remaining.max(0.0).ceil() as u32;
-        c.text(264.0, 61.0, &format!("{:02}:{:02}", secs / 60, secs % 60), size::HERO + 1.0, W::Bold, if resting{theme::SOFT_GREEN}else{theme::WHITE}, H::Center);
+        let secs = self.pomo.shown_secs();
+        let clock = crate::app::clock_text(secs);
+        let hero = if clock.len() > 5 { size::HERO - 3.0 } else { size::HERO + 1.0 };
+        c.text(264.0, 61.0, &clock, hero, W::Bold, if resting{theme::SOFT_GREEN}else if stopwatch{theme::BLUE}else{theme::WHITE}, H::Center);
         c.text(264.0, 79.0, self.pomo.phase.label(), size::SMALL, W::Regular, theme::GRAY, H::Center);
 
         // 重置：点一下图标转一圈
@@ -239,12 +242,12 @@ impl App {
         rc.circle(329.0, 50.0, 11.0, mix(Color32::from_rgb(28, 28, 30), Color32::from_rgb(50, 50, 54), h));
         paint::reset(&rc, 329.0, 50.0, -self.reset_spin.pos, Color32::from_gray(230));
         if r.clicked() {
-            self.pomo.remaining = self.phase_secs(self.pomo.phase);
+            self.pomo.remaining = self.phase_start(self.pomo.phase);
             self.pomo.running = false;
             self.reset_spin.target += TAU;
         }
 
-        for (phase,label,x,width,id) in [(Phase::Focus,"Focus",148.0,88.0,"f-focus"),(Phase::Rest,"Break",292.0,88.0,"f-rest")] {
+        for (phase,label,x,width,id) in [(Phase::Focus,"Focus",148.0,88.0,"f-focus"),(Phase::Rest,"Break",292.0,52.0,"f-rest")] {
             let selected=self.pomo.phase==phase;
             let accent=if phase==Phase::Focus{theme::RED_TOP}else{theme::SOFT_GREEN};
             let background=if selected{mix(theme::BTN,accent,0.22)}else{theme::BTN};
@@ -252,11 +255,19 @@ impl App {
             button.text(x+width/2.0,110.0,label,size::BODY,W::Semibold,if selected{mix(accent,theme::WHITE,0.5)}else{theme::WHITE},H::Center);
             if response.clicked(){self.set_phase(phase);}
         }
+        // Stopwatch: counts up with no limit.
+        {
+            let selected=stopwatch;
+            let background=if selected{mix(theme::BTN,theme::BLUE,0.30)}else{theme::BTN};
+            let (response,button)=capsule(c,348.0,94.0,32.0,25.0,"f-stopwatch",background,if selected{mix(theme::BTN_HOVER,theme::BLUE,0.35)}else{theme::BTN_HOVER});
+            paint::stopwatch(&button,364.0,107.0,6.5,0.0,if selected{mix(theme::BLUE,theme::WHITE,0.4)}else{theme::WHITE});
+            if response.on_hover_text("Stopwatch (counts up, no limit)").clicked(){self.set_phase(Phase::Stopwatch);}
+        }
         let (b2, c2) = capsule(c, 246.0, 94.0, 36.0, 25.0, "f-start", theme::RED, Color32::from_rgb(255, 82, 98));
         paint::play_pause(&c2, 264.0, 106.5, 11.0, run, theme::WHITE);
         let b2=b2.on_hover_text(if self.pomo.running{"Pause timer"}else{"Start timer"});
         if b2.clicked() {
-            if self.pomo.remaining <= 0.0 {
+            if self.pomo.remaining <= 0.0 && !stopwatch {
                 self.pomo.remaining = self.phase_secs(self.pomo.phase);
             }
             self.pomo.running = !self.pomo.running;
@@ -266,8 +277,13 @@ impl App {
     fn set_phase(&mut self, ph: Phase) {
         if self.pomo.phase==ph {return;}
         self.pomo.phase = ph;
-        self.pomo.remaining = self.phase_secs(ph);
+        self.pomo.remaining = self.phase_start(ph);
         self.pomo.running = false;
+    }
+
+    /// Starting value: full duration for Focus/Break, zero for the stopwatch.
+    pub(crate) fn phase_start(&self, ph: Phase) -> f32 {
+        if ph == Phase::Stopwatch { 0.0 } else { self.phase_secs(ph) }
     }
 
     // ================= 饮水 =================

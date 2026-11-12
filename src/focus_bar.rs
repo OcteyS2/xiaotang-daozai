@@ -86,14 +86,16 @@ pub(crate) fn draw(c:&Card,cx:f32,cy:f32,t:f64,pomo:&Pomo,total:f32,compact:bool
     let width=if compact{LYRIC_WIDTH}else{WIDTH};
     let left=cx-width/2.0;
     let t=if pomo.running&&crate::bar_layout::animations_enabled(){t as f32}else{0.0};
-    let fraction=(pomo.remaining/total).clamp(0.0,1.0);
-    let ink=if pomo.phase==Phase::Focus {
+    let fraction=pomo.fraction(total);
+    let ink=if pomo.phase==Phase::Stopwatch {
+        tomato(c,left+12.0,cy,fraction,t);theme::BLUE
+    }else if pomo.phase==Phase::Focus {
         tomato(c,left+12.0,cy,fraction,t);theme::RED_TOP
     }else{
         tea(c,left+12.0,cy,fraction,t);theme::SOFT_GREEN
     };
-    let secs=pomo.remaining.max(0.0).ceil() as u32;
-    c.text(left+width-20.0,cy+4.8,&format!("{:02}:{:02}",secs/60,secs%60),if compact{10.0}else{11.0},W::Bold,ink,H::Center);
+    let secs=pomo.shown_secs();
+    c.text(left+width-20.0,cy+4.8,&crate::app::clock_text_short(secs),if compact{10.0}else{11.0},W::Bold,ink,H::Center);
 }
 
 #[cfg(test)]

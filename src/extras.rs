@@ -154,6 +154,7 @@ impl App {
         (match phase {
             Phase::Focus => self.settings.focus_minutes,
             Phase::Rest => self.settings.rest_minutes,
+            Phase::Stopwatch => 60,
         }) as f32
             * 60.0
     }
@@ -172,7 +173,7 @@ impl App {
             state
         } else if self.pet.waking_until > self.t {
             PetState::Waking
-        } else if self.pomo.running && self.pomo.phase == Phase::Focus {
+        } else if self.pomo.running && self.pomo.phase.is_focus_like() {
             PetState::Focused
         } else if self.pet.worried {
             PetState::Worried
@@ -830,7 +831,7 @@ impl App {
                     let y=53.0+i as f32*23.0;
                     c.text(48.0,y+13.0,name,10.5,W::Regular,theme::GRAY,H::Left);
                     let value=if i==0{&mut self.settings.focus_minutes}else{&mut self.settings.rest_minutes};
-                    let max=if i==0{180}else{60};let rect=c.rect(168.0,y,76.0,19.0);
+                    let max=if i==0{crate::model::FOCUS_MAX_MINUTES}else{60};let rect=c.rect(168.0,y,76.0,19.0);
                     let mut ui=egui::Ui::new(c.ui.ctx().clone(),egui::Id::new(("focus-duration",i)),egui::UiBuilder::new().layer_id(c.ui.layer_id()).max_rect(rect).style(c.ui.style().clone()));
                     ui.set_clip_rect(c.painter.clip_rect());ui.set_opacity(c.painter.opacity());if !c.live{ui.disable();}
                     ui.spacing_mut().interact_size=rect.size();ui.spacing_mut().button_padding=egui::vec2(2.0,1.0);
@@ -838,11 +839,14 @@ impl App {
                     ui.style_mut().text_styles.insert(egui::TextStyle::Body,c.font(11.0,W::Bold));
                     ui.style_mut().explanation_tooltips=false;
                     ui.visuals_mut().widgets.inactive.weak_bg_fill=Color32::TRANSPARENT;
-                    let field=ui.put(rect,egui::DragValue::new(value).range(1..=max).suffix(" min").update_while_editing(false)).on_hover_text("Click to enter minutes");
+                    let drag=egui::DragValue::new(value).range(1..=max).update_while_editing(false);
+                    let drag=if i==0{hours_drag(drag)}else{drag.suffix(" min")};
+                    let field=ui.put(rect,drag).on_hover_text(if i==0{"Click to type: 90, 1h30 or 2.5h"}else{"Click to enter minutes"});
                     if field.gained_focus(){self.pending.push(Cmd::Focus);}
                     self.focus_editing|=field.has_focus();
-                    if setting_button(c,131.0,y,27.0,"−",false,&format!("focus-minus-{i}")){*value=value.saturating_sub(1).max(1);}
-                    if setting_button(c,255.0,y,27.0,"+",false,&format!("focus-plus-{i}")){*value=(*value+1).min(max);}
+                    let step=if i==0&&*value>=60{15}else if i==0{5}else{1};
+                    if setting_button(c,131.0,y,27.0,"−",false,&format!("focus-minus-{i}")){*value=value.saturating_sub(step).max(1);}
+                    if setting_button(c,255.0,y,27.0,"+",false,&format!("focus-plus-{i}")){*value=(*value+step).min(max);}
                 }
                 c.text(315.0,93.0,"Applies next time",10.5,W::Regular,theme::GRAY,H::Center);
             }
@@ -1023,7 +1027,42 @@ fn setting_number<N:egui::emath::Numeric>(ui:&mut egui::Ui,title:&str,value:&mut
     });
     changed
 }
+/// Minutes shown as "45 min", "2h" or "1h 30m".
+pub(crate) fn minutes_text(m:u32)->String{
+    if m<60{format!("{m} min")}else if m%60==0{format!("{}h",m/60)}else{format!("{}h {:02}m",m/60,m%60)}
+}
+/// Accepts "90", "90 min", "1:30", "1h30", "1h 30m", "2.5h" and returns minutes.
+pub(crate) fn parse_minutes(s:&str)->Option<f64>{
+    let s=s.trim().to_lowercase().replace(' ',"");
+    let s=s.trim_end_matches("min").trim_end_matches('m');
+    if s.is_empty(){return None;}
+    if let Some((h,m))=s.split_once(':'){return Some(h.parse::<f64>().ok()?*60.0+if m.is_empty(){0.0}else{m.parse::<f64>().ok()?});}
+    if let Some((h,m))=s.split_once('h'){
+        let h=if h.is_empty(){0.0}else{h.parse::<f64>().ok()?};
+        let m=if m.is_empty(){0.0}else{m.parse::<f64>().ok()?};
+        return Some((h*60.0+m).round());
+    }
+    s.parse::<f64>().ok()
+}
+pub(crate) fn hours_drag(drag:egui::DragValue<'_>)->egui::DragValue<'_>{
+    drag.custom_formatter(|v,_|minutes_text(v.round().max(0.0) as u32)).custom_parser(parse_minutes)
+}
+fn setting_hours(ui:&mut egui::Ui,title:&str,value:&mut u32,min:u32,max:u32)->bool{
+    let mut changed=false;
+    settings_control_row(ui,title,80.0,|ui|{
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center),|ui|{
+            ui.allocate_ui_with_layout(egui::vec2(140.0,30.0),egui::Layout::left_to_right(egui::Align::Center),|ui|{
+                changed=number_stepper_ex(ui,value,min,max,"",if *value>=60{15}else{5},76.0,true);
+            });
+        }).response
+    });
+    changed
+}
 fn number_stepper<N:egui::emath::Numeric>(ui:&mut egui::Ui,value:&mut N,min:N,max:N,suffix:&str,step:N,field_width:f32)->bool{
+    number_stepper_ex(ui,value,min,max,suffix,step,field_width,false)
+}
+#[allow(clippy::too_many_arguments)]
+fn number_stepper_ex<N:egui::emath::Numeric>(ui:&mut egui::Ui,value:&mut N,min:N,max:N,suffix:&str,step:N,field_width:f32,hours:bool)->bool{
     let ctx=&ui.ctx().clone();
     let mut changed=false;
     ui.scope(|ui|{
@@ -1035,7 +1074,8 @@ fn number_stepper<N:egui::emath::Numeric>(ui:&mut egui::Ui,value:&mut N,min:N,ma
         if decrease.clicked(){
             *value=N::from_f64((value.to_f64()-step.to_f64()).max(min.to_f64()));changed=true;
         }
-        let field=ui.add_sized([field_width,28.0],egui::DragValue::new(value).range(min..=max).speed(step.to_f64()).suffix(suffix).fixed_decimals(if N::INTEGRAL{0}else{2}));
+        let drag=egui::DragValue::new(value).range(min..=max).speed(step.to_f64()).suffix(suffix).fixed_decimals(if N::INTEGRAL{0}else{2});
+        let field=ui.add_sized([field_width,28.0],if hours{hours_drag(drag)}else{drag});
         changed|=field.changed();
         if ui.add_enabled(*value<max,button("+").min_size(egui::vec2(26.0,26.0))).on_hover_text("Increase").clicked(){
             *value=N::from_f64((value.to_f64()+step.to_f64()).min(max.to_f64()));changed=true;
@@ -1328,11 +1368,11 @@ impl App {
                     2=>{
                         settings_label(ui,"Timer Durations");
                         settings_card(ui,|ui|{
-                            setting_number(ui,"Focus",&mut self.settings.focus_minutes,1,180," min",1.0);
+                            setting_hours(ui,"Focus",&mut self.settings.focus_minutes,1,crate::model::FOCUS_MAX_MINUTES);
                             ui.separator();
                             setting_number(ui,"Break",&mut self.settings.rest_minutes,1,60," min",1.0);
                             ui.add_space(3.0);
-                            ui.small("Changes take effect from the next phase.");
+                            ui.small("Focus goes up to 12 h. Type 90, 1h30 or 2.5h. For open-ended sessions use the Stopwatch button on the Focus page. Changes take effect from the next phase.");
                         });
                     }
                     3=>{

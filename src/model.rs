@@ -181,6 +181,9 @@ pub fn island_size_value(value: u32) -> u32 {
     (value + ISLAND_SIZE_STEP / 2) / ISLAND_SIZE_STEP * ISLAND_SIZE_STEP
 }
 
+/// Longest Focus duration (12 hours).
+pub const FOCUS_MAX_MINUTES: u32 = 720;
+
 #[derive(Clone, Debug)]
 pub struct Settings {
     pub display_id: String,
@@ -322,7 +325,7 @@ impl Settings {
                 "island_lyrics" => s.island_lyrics=v=="1",
                 "lyric_delay_ms" => s.lyric_delay_ms=v.parse::<i32>().unwrap_or(-350).clamp(-5000,5000),
                 "hide_fullscreen" => s.hide_fullscreen = v != "0",
-                "focus_minutes" => s.focus_minutes = v.parse::<u32>().unwrap_or(25).clamp(1, 180),
+                "focus_minutes" => s.focus_minutes = v.parse::<u32>().unwrap_or(25).clamp(1, FOCUS_MAX_MINUTES),
                 "rest_minutes" | "short_minutes" => s.rest_minutes = v.parse::<u32>().unwrap_or(5).clamp(1, 60),
                 "water_minutes" => s.water_minutes = v.parse::<u32>().unwrap_or(45).clamp(5, 180),
                 "serving_ml" => s.serving_ml = v.parse::<u32>().unwrap_or(250).clamp(50, 1000),

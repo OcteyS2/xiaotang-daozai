@@ -411,6 +411,7 @@ pub struct FrameOut {
 pub(crate) enum Phase {
     Focus,
     Rest,
+    Stopwatch,
 }
 
 impl Phase {
@@ -418,6 +419,48 @@ impl Phase {
         match self {
             Phase::Focus => "Focus Time",
             Phase::Rest => "Break",
+            Phase::Stopwatch => "Stopwatch",
+        }
+    }
+    /// Phases that count focused time (pet stays focused, tomato colors).
+    pub(crate) fn is_focus_like(self) -> bool {
+        self != Phase::Rest
+    }
+}
+
+/// Seconds as MM:SS, or H:MM:SS from one hour up.
+pub(crate) fn clock_text(secs: u32) -> String {
+    if secs >= 3600 {
+        format!("{}:{:02}:{:02}", secs / 3600, secs / 60 % 60, secs % 60)
+    } else {
+        format!("{:02}:{:02}", secs / 60, secs % 60)
+    }
+}
+
+/// Short form for tight spots: MM:SS, or 1h05 from one hour up.
+pub(crate) fn clock_text_short(secs: u32) -> String {
+    if secs >= 3600 {
+        format!("{}h{:02}", secs / 3600, secs / 60 % 60)
+    } else {
+        format!("{:02}:{:02}", secs / 60, secs % 60)
+    }
+}
+
+impl Pomo {
+    /// Seconds to show: remaining for Focus/Break, elapsed for the stopwatch.
+    pub(crate) fn shown_secs(&self) -> u32 {
+        if self.phase == Phase::Stopwatch {
+            self.remaining.max(0.0).floor() as u32
+        } else {
+            self.remaining.max(0.0).ceil() as u32
+        }
+    }
+    /// Ring/fill fraction. The stopwatch fills once per hour.
+    pub(crate) fn fraction(&self, total: f32) -> f32 {
+        if self.phase == Phase::Stopwatch {
+            (self.remaining.max(0.0) % 3600.0) / 3600.0
+        } else {
+            (self.remaining / total).clamp(0.0, 1.0)
         }
     }
 }
@@ -2521,7 +2564,9 @@ impl App {
             self.water_ml = self.water.drunk_ml as f32;
             self.water_ring.snap(self.water.percent() / 100.0);
         }
-        if self.pomo.running {
+        if self.pomo.running && self.pomo.phase == Phase::Stopwatch {
+            self.pomo.remaining += elapsed;
+        } else if self.pomo.running {
             self.pomo.remaining -= elapsed;
             if self.pomo.remaining <= 0.0 {
                 let next = match self.pomo.phase {
@@ -2529,7 +2574,7 @@ impl App {
                         self.pet.react(PetState::Happy);
                         Phase::Rest
                     }
-                    Phase::Rest => Phase::Focus,
+                    Phase::Rest | Phase::Stopwatch => Phase::Focus,
                 };
                 self.pomo.phase = next;
                 self.pomo.remaining = self.phase_secs(next);
@@ -2537,7 +2582,7 @@ impl App {
                 self.alert("Focus Timer", format!("Up next: {}", next.label()), 1, true);
             }
         }
-        self.ring_shown.target = (self.pomo.remaining / self.phase_secs(self.pomo.phase)).clamp(0.0, 1.0);
+        self.ring_shown.target = self.pomo.fraction(self.phase_secs(self.pomo.phase));
         self.ring_shown.step(dt);
         self.reset_spin.step(dt);
         self.todo_pop.step(dt);

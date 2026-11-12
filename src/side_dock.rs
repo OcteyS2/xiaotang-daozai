@@ -130,10 +130,12 @@ impl App {
                 SideItem::Battery => paint::battery(c, cx, mid, env.battery, env.charging, 0.72),
                 SideItem::Music => paint::playback_bars(c, cx, mid, self.t, self.media.playing, theme::WHITE),
                 SideItem::Focus => {
-                    let minutes = (self.pomo.remaining / 60.0).ceil().max(0.0) as u32;
-                    let color = if self.pomo.phase == Phase::Focus { theme::RED_TOP } else { theme::GREEN };
+                    let secs = self.pomo.shown_secs();
+                    let minutes = if self.pomo.phase == Phase::Stopwatch { secs / 60 } else { secs.div_ceil(60) };
+                    let color = match self.pomo.phase { Phase::Focus => theme::RED_TOP, Phase::Stopwatch => theme::BLUE, Phase::Rest => theme::GREEN };
                     c.circle(cx, mid - 5.0, 3.0, color);
-                    c.text(cx, mid + 9.0, &format!("{minutes}′"), size::TINY, W::Semibold, theme::WHITE, H::Center);
+                    let text = if minutes >= 60 { format!("{}h{:02}", minutes / 60, minutes % 60) } else { format!("{minutes}′") };
+                    c.text(cx, mid + 9.0, &text, size::TINY, W::Semibold, theme::WHITE, H::Center);
                 }
                 SideItem::Quota(index, h) => self.draw_quota_side(c, cx, mid, h, index),
                 SideItem::Bell => {
