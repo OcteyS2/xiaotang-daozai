@@ -247,24 +247,28 @@ impl App {
             self.reset_spin.target += TAU;
         }
 
-        for (phase,label,x,width,id) in [(Phase::Focus,"Focus",148.0,88.0,"f-focus"),(Phase::Rest,"Break",292.0,52.0,"f-rest")] {
+        // Mode switch: one segmented pill (Focus | Break | Stopwatch), play button on the right.
+        let (sx,sy,sh)=(148.0,94.0,25.0);
+        c.fill(sx,sy,190.0,sh,sh/2.0,theme::BTN);
+        let mut x=sx+2.0;
+        for (phase,label,width,id,accent) in [
+            (Phase::Focus,"Focus",56.0,"f-focus",theme::RED_TOP),
+            (Phase::Rest,"Break",56.0,"f-rest",theme::SOFT_GREEN),
+            (Phase::Stopwatch,"Stopwatch",74.0,"f-stopwatch",theme::BLUE),
+        ] {
             let selected=self.pomo.phase==phase;
-            let accent=if phase==Phase::Focus{theme::RED_TOP}else{theme::SOFT_GREEN};
-            let background=if selected{mix(theme::BTN,accent,0.22)}else{theme::BTN};
-            let (response,button)=capsule(c,x,94.0,width,25.0,id,background,if selected{mix(theme::BTN_HOVER,accent,0.25)}else{theme::BTN_HOVER});
-            button.text(x+width/2.0,110.0,label,size::BODY,W::Semibold,if selected{mix(accent,theme::WHITE,0.5)}else{theme::WHITE},H::Center);
+            let background=if selected{mix(theme::BTN,accent,0.30)}else{theme::BTN};
+            let hover=if selected{mix(theme::BTN_HOVER,accent,0.35)}else{theme::BTN_HOVER};
+            let (response,button)=capsule(c,x,sy+2.0,width,sh-4.0,id,background,hover);
+            let ink=if selected{mix(accent,theme::WHITE,0.45)}else{theme::GRAY};
+            button.text(x+width/2.0,sy+16.0,label,size::SMALL,if selected{W::Bold}else{W::Semibold},ink,H::Center);
+            let response=if phase==Phase::Stopwatch{response.on_hover_text("Counts up with no limit")}else{response};
             if response.clicked(){self.set_phase(phase);}
+            x+=width+1.0;
         }
-        // Stopwatch: counts up with no limit.
-        {
-            let selected=stopwatch;
-            let background=if selected{mix(theme::BTN,theme::BLUE,0.30)}else{theme::BTN};
-            let (response,button)=capsule(c,348.0,94.0,32.0,25.0,"f-stopwatch",background,if selected{mix(theme::BTN_HOVER,theme::BLUE,0.35)}else{theme::BTN_HOVER});
-            paint::stopwatch(&button,364.0,107.0,6.5,0.0,if selected{mix(theme::BLUE,theme::WHITE,0.4)}else{theme::WHITE});
-            if response.on_hover_text("Stopwatch (counts up, no limit)").clicked(){self.set_phase(Phase::Stopwatch);}
-        }
-        let (b2, c2) = capsule(c, 246.0, 94.0, 36.0, 25.0, "f-start", theme::RED, Color32::from_rgb(255, 82, 98));
-        paint::play_pause(&c2, 264.0, 106.5, 11.0, run, theme::WHITE);
+        let accent=if resting{theme::SOFT_GREEN}else if stopwatch{theme::BLUE}else{theme::RED};
+        let (b2, c2) = capsule(c, 344.0, 94.0, 36.0, 25.0, "f-start", mix(accent,Color32::BLACK,0.1), mix(accent,theme::WHITE,0.15));
+        paint::play_pause(&c2, 362.0, 106.5, 11.0, run, theme::WHITE);
         let b2=b2.on_hover_text(if self.pomo.running{"Pause timer"}else{"Start timer"});
         if b2.clicked() {
             if self.pomo.remaining <= 0.0 && !stopwatch {

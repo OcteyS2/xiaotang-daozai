@@ -1372,7 +1372,7 @@ impl App {
                             ui.separator();
                             setting_number(ui,"Break",&mut self.settings.rest_minutes,1,60," min",1.0);
                             ui.add_space(3.0);
-                            ui.small("Focus goes up to 12 h. Type 90, 1h30 or 2.5h. For open-ended sessions use the Stopwatch button on the Focus page. Changes take effect from the next phase.");
+                            ui.small("Focus goes up to 24 h. Type 90, 1h30 or 2.5h. For open-ended sessions use the Stopwatch button on the Focus page. Changes take effect from the next phase.");
                         });
                     }
                     3=>{

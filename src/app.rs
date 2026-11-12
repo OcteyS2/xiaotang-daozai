@@ -2465,7 +2465,7 @@ impl App {
         let base = 25.0;
         let (a, b, col) = match page {
             0 | CALENDAR_PAGE => return,
-            1 => ("Pomodoro", " Focus", theme::RED_TOP),
+            1 => ("Focus", "", theme::RED_TOP),
             2 => ("Water", " Reminder", theme::BLUE),
             // 置物架的标题就是「置物架 | 剪贴板」分栏，由页面自己画。
             3 => return,

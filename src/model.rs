@@ -181,8 +181,8 @@ pub fn island_size_value(value: u32) -> u32 {
     (value + ISLAND_SIZE_STEP / 2) / ISLAND_SIZE_STEP * ISLAND_SIZE_STEP
 }
 
-/// Longest Focus duration (12 hours).
-pub const FOCUS_MAX_MINUTES: u32 = 720;
+/// Longest Focus duration (24 hours).
+pub const FOCUS_MAX_MINUTES: u32 = 1440;
 
 #[derive(Clone, Debug)]
 pub struct Settings {
